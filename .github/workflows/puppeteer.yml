@@ -1,44 +1,50 @@
-name: Scrape Return Notes
+name: Run Return Notes Scraper
+
 on:
+  schedule:
+    # Runs every day at 8 AM UTC
+    - cron: "0 8 * * *"
   workflow_dispatch:
+
+env:
+  CI: true
+  LOGIN_EMAIL: ${{ secrets.LOGIN_EMAIL }}
+  LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Setup workspace
-        run: mkdir -p workspace
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
 
-      - name: Create files manually
-        working-directory: workspace
-        run: |
-          # Initialize database
-          sqlite3 return_notes.db "CREATE TABLE IF NOT EXISTS parcels (
-            id INTEGER PRIMARY KEY,
-            data TEXT
-          );"
+      - name: Install dependencies
+        run: npm install puppeteer sqlite3
 
-          # Create log file
-          echo "INITIALIZED $(date)" > scraper.log
-          ls -lah
+      - name: Create data directory
+        run: mkdir -p .github/private
 
       - name: Run scraper
-        working-directory: workspace
-        run: |
-          node ../scraper.js 2>&1 | tee -a scraper.log
+        run: node scraper.js
 
-      - name: Verify output
+      - name: Commit and push changes
+        if: always()
         run: |
-          sqlite3 workspace/return_notes.db ".tables"
-          sqlite3 workspace/return_notes.db "SELECT COUNT(*) FROM parcels;"
-          tail -n 10 workspace/scraper.log
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add .
+          git commit -m "Update return notes data" || echo "No changes to commit"
+          git push || echo "No changes to push"
 
-      - name: Upload results
-        uses: actions/upload-artifact@v4
+      - name: Upload error log
+        if: failure()
+        uses: actions/upload-artifact@v3
         with:
-          name: scraping-data
-          path: |
-            workspace/return_notes.db
-            workspace/scraper.log
+          name: error-log
+          path: .github/private/error.json
