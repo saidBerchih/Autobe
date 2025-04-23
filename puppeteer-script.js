@@ -185,8 +185,7 @@ async function saveToFirestore(returnNotes) {
       parcelCount: note.parcels?.length || 0,
     };
 
-    batch.set(noteRef, noteData, { ignoreUndefinedProperties: true });
-
+    batch.set(noteRef, cleanData(noteData));
     const parcelsRef = noteRef.collection("parcels");
     for (const parcel of note.parcels) {
       // Ensure all required fields have values
@@ -196,7 +195,11 @@ async function saveToFirestore(returnNotes) {
         status: parcel.status || "Unknown",
         lastUpdated: new Date().toISOString(),
       };
-
+      function cleanData(obj) {
+        return Object.fromEntries(
+          Object.entries(obj).filter(([_, v]) => v !== undefined)
+        );
+      }
       batch.set(parcelsRef.doc(parcel.parcelNumber), parcelData, {
         ignoreUndefinedProperties: true,
       });
