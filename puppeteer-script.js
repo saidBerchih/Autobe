@@ -94,11 +94,16 @@ const CONFIG = {
       page.waitForNavigation({ waitUntil: "networkidle2" }),
       page.click(CONFIG.LOGIN.SELECTORS.SUBMIT),
     ]);
+
+    const returnNotes = await getReturnNotes(page);
     // Create screenshots directory if not exists
     if (!fs.existsSync("screenshots")) {
       fs.mkdirSync("screenshots");
     }
-
+    fs.writeFileSync("return-notes.json", JSON.stringify(returnNotes, null, 2));
+    console.log(
+      `Successfully processed ${returnNotes.length} return notes. Data saved to return-notes.json`
+    );
     await page.screenshot({
       path: "screenshots/example.png",
       fullPage: true,
@@ -112,55 +117,39 @@ const CONFIG = {
   }
 })();
 
-async function login(page) {
-  timer.start("login");
+async function getReturnNotes(page) {
+  const results = [];
+
   try {
-    console.log("Navigating to login page...");
-    timer.start("login_navigation");
-    await page.goto(`${CONFIG.BASE_URL}${CONFIG.LOGIN.URL}`, {
+    await page.goto(`${CONFIG.BASE_URL}${CONFIG.RETURN_NOTES.URL}`, {
       waitUntil: "networkidle2",
       timeout: 30000,
     });
-    timer.end("login_navigation");
 
-    console.log("Entering credentials...");
-    timer.start("login_credentials_entry");
-    await page.waitForSelector(CONFIG.LOGIN.SELECTORS.USERNAME, {
+    await page.waitForSelector(CONFIG.RETURN_NOTES.SELECTORS.DROPDOWN, {
       visible: true,
     });
-    await page.type(
-      CONFIG.LOGIN.SELECTORS.USERNAME,
-      process.env.LOGIN_EMAIL || "sellingkhalid@gmail.com",
-      { delay: 30 }
+    await page.select(CONFIG.RETURN_NOTES.SELECTORS.DROPDOWN, "50");
+
+    const noteIds = await page.$$eval(
+      CONFIG.RETURN_NOTES.SELECTORS.ROWS,
+      (rows) => rows.map((row) => row.id).filter(Boolean)
     );
 
-    await page.waitForSelector(CONFIG.LOGIN.SELECTORS.PASSWORD, {
-      visible: true,
-    });
-    await page.type(
-      CONFIG.LOGIN.SELECTORS.PASSWORD,
-      process.env.LOGIN_PASSWORD || "moiy@1421",
-      { delay: 30 }
-    );
+    for (const noteId of noteIds) {
+      try {
+        // console.log(`Processing return note ${noteId}...`);
+        const noteDetails = await processReturnNote(page, noteId);
+        results.push(noteDetails);
+      } catch (error) {
+        console.error(`Error processing return note ${noteId}:`, error);
+        continue;
+      }
+    }
 
-    timer.end("login_credentials_entry");
-    console.log("Submitting login form...");
-    timer.start("login_submission");
-
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: "networkidle2" }),
-      page.click(CONFIG.LOGIN.SELECTORS.SUBMIT),
-    ]);
-
-    timer.end("login_submission");
-    console.log("✔ Login successful");
-    timer.end("login");
-
-    return true;
+    return results;
   } catch (error) {
-    timer.end("login");
-    console.error("Login failed:", error);
-    await page.screenshot({ path: "login-error.png" });
+    await page.screenshot({ path: "return-notes-error.png" });
     throw error;
   }
 }
