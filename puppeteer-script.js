@@ -1,7 +1,7 @@
 const puppeteer = require("puppeteer");
 const fs = require("fs");
 const { cert, initializeApp } = require("firebase-admin/app");
-const {} = require("firebase-admin/firestore");
+const { getFirestore } = require("firebase-admin/firestore");
 const CONFIG = {
   BASE_URL: "https://clients.12livery.ma",
   LOGIN: {
@@ -195,5 +195,4 @@ async function saveToFirestore(returnNotes) {
   }
 
   await batch.commit();
-  console.log(`Saved ${returnNotes.length} notes to Firestore`);
 }
