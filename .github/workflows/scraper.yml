@@ -2,8 +2,7 @@ name: Run Return Notes Scraper
 
 on:
   schedule:
-    # Runs every day at 8 AM UTC
-    - cron: "0 8 * * *"
+    - cron: "0 8 * * *" # Runs daily at 8 AM UTC
   workflow_dispatch:
 
 env:
@@ -25,26 +24,29 @@ jobs:
           node-version: "18"
 
       - name: Install dependencies
-        run: npm install puppeteer sqlite3
+        run: |
+          npm install puppeteer sqlite3
 
       - name: Create data directory
         run: mkdir -p .github/private
 
       - name: Run scraper
-        run: node scraper.js
+        id: run-scraper
+        run: |
+          node scraper.js || echo "::error::Scraper failed"
+          echo "scraper_exit_code=$?" >> $GITHUB_OUTPUT
+
+      - name: Output error details
+        if: steps.run-scraper.outputs.scraper_exit_code != '0'
+        run: |
+          echo "Scraper failed with exit code ${{ steps.run-scraper.outputs.scraper_exit_code }}"
+          [ -f ".github/private/error.json" ] && cat ".github/private/error.json" || echo "No error details available"
 
       - name: Commit and push changes
-        if: always()
+        if: steps.run-scraper.outputs.scraper_exit_code == '0'
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           git add .
           git commit -m "Update return notes data" || echo "No changes to commit"
           git push || echo "No changes to push"
-
-      - name: Upload error log
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: error-log
-          path: .github/private/error.json
