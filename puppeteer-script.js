@@ -100,7 +100,14 @@ const CONFIG = {
     if (!fs.existsSync("screenshots")) {
       fs.mkdirSync("screenshots");
     }
-    fs.writeFileSync("return-notes.json", JSON.stringify(returnNotes, null, 2));
+
+    if (!fs.existsSync("data")) {
+      fs.mkdirSync("data");
+    }
+    fs.writeFileSync(
+      "data/return-notes.json",
+      JSON.stringify(returnNotes, null, 2)
+    );
     console.log(
       `Successfully processed ${returnNotes.length} return notes. Data saved to return-notes.json`
     );
