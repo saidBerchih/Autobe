@@ -2,13 +2,9 @@ name: Puppeteer with Firebase
 
 on: [workflow_dispatch]
 
-env:
-  CI: true
-
 jobs:
   run-puppeteer:
     runs-on: windows-latest
-    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -17,7 +13,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -26,8 +21,11 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
-          echo "Secret length: ${#FIREBASE_SERVICE_ACCOUNT}"
-          [ -z "$FIREBASE_SERVICE_ACCOUNT" ] && echo "Error: Empty secret" && exit 1
+          if (-not $env:FIREBASE_SERVICE_ACCOUNT) {
+            Write-Error "Error: FIREBASE_SERVICE_ACCOUNT secret is empty or missing"
+            exit 1
+          }
+          Write-Output "Secret verification passed (length: $($env:FIREBASE_SERVICE_ACCOUNT.Length))"
 
       - name: Run Puppeteer
         env:

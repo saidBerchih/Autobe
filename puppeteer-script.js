@@ -190,7 +190,7 @@ async function saveToFirestore(returnNotes) {
     for (const parcel of note.parcels) {
       // Ensure all required fields have values
       const parcelData = {
-        date: parcel.date || null,
+        date: parcel.date || "Unkown",
         city: parcel.city || "Unknown",
         status: parcel.status || "Unknown",
         lastUpdated: new Date().toISOString(),
