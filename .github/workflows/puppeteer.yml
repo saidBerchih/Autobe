@@ -30,3 +30,9 @@ jobs:
         with:
           name: screenshot
           path: screenshots/example.png
+
+      - name: Verify JSON output
+        run: |
+          echo "Generated file contents:"
+          dir data\
+          type data\return-notes.json | jq '. | length' || echo "No JSON file found"
