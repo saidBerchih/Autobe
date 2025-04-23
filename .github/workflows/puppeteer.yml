@@ -1,32 +1,44 @@
-name: Puppeteer Automation
-
+name: Scrape Return Notes
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 jobs:
-  run-puppeteer:
-    runs-on: windows-latest # Windows runner
-    timeout-minutes: 10
-
+  scrape:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
+      - name: Setup workspace
+        run: mkdir -p workspace
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Create files manually
+        working-directory: workspace
+        run: |
+          # Initialize database
+          sqlite3 return_notes.db "CREATE TABLE IF NOT EXISTS parcels (
+            id INTEGER PRIMARY KEY,
+            data TEXT
+          );"
 
-      - name: Run Puppeteer
-        run: node puppeteer-script.js
+          # Create log file
+          echo "INITIALIZED $(date)" > scraper.log
+          ls -lah
 
-      - name: Upload screenshot
+      - name: Run scraper
+        working-directory: workspace
+        run: |
+          node ../scraper.js 2>&1 | tee -a scraper.log
+
+      - name: Verify output
+        run: |
+          sqlite3 workspace/return_notes.db ".tables"
+          sqlite3 workspace/return_notes.db "SELECT COUNT(*) FROM parcels;"
+          tail -n 10 workspace/scraper.log
+
+      - name: Upload results
         uses: actions/upload-artifact@v4
         with:
-          name: screenshot
-          path: screenshots/example.png
+          name: scraping-data
+          path: |
+            workspace/return_notes.db
+            workspace/scraper.log
