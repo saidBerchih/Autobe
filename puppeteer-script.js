@@ -1,45 +1,7 @@
 const puppeteer = require("puppeteer");
 const fs = require("fs");
-
-class Timer {
-  constructor() {
-    this.metrics = {};
-  }
-
-  start(label) {
-    this.metrics[label] = {
-      start: process.hrtime(),
-      end: null,
-      duration: null,
-    };
-  }
-
-  end(label) {
-    if (!this.metrics[label]) {
-      throw new Error(`Timer label "${label}" not found`);
-    }
-
-    const diff = process.hrtime(this.metrics[label].start);
-    this.metrics[label].end = new Date();
-    this.metrics[label].duration =
-      (diff[0] * 1e3 + diff[1] / 1e6).toFixed(2) + "ms";
-    return this.metrics[label].duration;
-  }
-
-  getMetrics() {
-    return this.metrics;
-  }
-
-  logMetrics() {
-    console.log("\n=== Performance Metrics ===");
-    for (const [label, metric] of Object.entries(this.metrics)) {
-      console.log(`${label}: ${metric.duration}`);
-    }
-    console.log("=========================\n");
-  }
-}
-const timer = new Timer();
-
+const { cert, initializeApp } = require("firebase-admin/app");
+const {} = require("firebase-admin/firestore");
 const CONFIG = {
   BASE_URL: "https://clients.12livery.ma",
   LOGIN: {
@@ -60,6 +22,14 @@ const CONFIG = {
     },
   },
 };
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+initializeApp({
+  credential: cert(serviceAccount),
+});
+
+const db = getFirestore();
+
 (async () => {
   try {
     const browser = await puppeteer.launch({
@@ -101,16 +71,8 @@ const CONFIG = {
       fs.mkdirSync("screenshots");
     }
 
-    if (!fs.existsSync("data")) {
-      fs.mkdirSync("data");
-    }
-    fs.writeFileSync(
-      "data/return-notes.json",
-      JSON.stringify(returnNotes, null, 2)
-    );
-    console.log(
-      `Successfully processed ${returnNotes.length} return notes. Data saved to return-notes.json`
-    );
+    await saveToFirestore(returnNotes);
+
     await page.screenshot({
       path: "screenshots/example.png",
       fullPage: true,
@@ -207,4 +169,31 @@ async function getReturnNotes(page) {
     await page.screenshot({ path: "return-notes-error.png" });
     throw error;
   }
+}
+
+async function saveToFirestore(returnNotes) {
+  const batch = db.batch();
+  const notesRef = db.collection("returnNotes");
+
+  for (const note of returnNotes) {
+    const noteRef = notesRef.doc(note.returnNoteId);
+    batch.set(noteRef, {
+      url: note.url,
+      processedAt: new Date().toISOString(),
+      parcelCount: note.parcels.length,
+    });
+
+    const parcelsRef = noteRef.collection("parcels");
+    for (const parcel of note.parcels) {
+      batch.set(parcelsRef.doc(parcel.parcelNumber), {
+        date: parcel.date,
+        city: parcel.city,
+        status: parcel.status,
+        lastUpdated: new Date().toISOString(),
+      });
+    }
+  }
+
+  await batch.commit();
+  console.log(`Saved ${returnNotes.length} notes to Firestore`);
 }

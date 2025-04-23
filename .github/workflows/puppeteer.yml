@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-
+env:
+  FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
 jobs:
   run-puppeteer:
     runs-on: windows-latest # Windows runner
