@@ -1,19 +1,14 @@
 name: Puppeteer with Firebase
 
-on:
-  workflow_dispatch:
-  push:
-    branches: [main]
+on: [workflow_dispatch]
+
+env:
+  CI: true
 
 jobs:
   run-puppeteer:
     runs-on: windows-latest
     timeout-minutes: 10
-
-    # Add permissions if needed
-    permissions:
-      contents: read
-      id-token: write # Required for Firebase Auth in some cases
 
     steps:
       - uses: actions/checkout@v4
@@ -27,14 +22,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Puppeteer with Firebase
+      - name: Verify Firebase Secret
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          echo "Secret length: ${#FIREBASE_SERVICE_ACCOUNT}"
+          [ -z "$FIREBASE_SERVICE_ACCOUNT" ] && echo "Error: Empty secret" && exit 1
+
+      - name: Run Puppeteer
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node puppeteer-script.js
-
-      - name: Upload screenshot
-        if: always() # Upload even if previous steps fail
-        uses: actions/upload-artifact@v4
-        with:
-          name: screenshot
-          path: screenshots/example.png
