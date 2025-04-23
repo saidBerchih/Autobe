@@ -1,6 +1,26 @@
 const puppeteer = require("puppeteer");
 const fs = require("fs");
 
+const CONFIG = {
+  BASE_URL: "https://clients.12livery.ma",
+  LOGIN: {
+    URL: "/login",
+    SELECTORS: {
+      USERNAME: "#exampleInputUsername1",
+      PASSWORD: "#exampleInputPassword1",
+      SUBMIT: ".login100-form-btn",
+    },
+  },
+  RETURN_NOTES: {
+    URL: "/return-note",
+    SELECTORS: {
+      ROWS: "table > tbody > tr",
+      DROPDOWN: "select.custom-select",
+      DETAILS_PAGE_INDICATOR: "#rn_added_parcels_table",
+      TABLE_LOADED: "table.dataTable",
+    },
+  },
+};
 (async () => {
   try {
     const browser = await puppeteer.launch({
@@ -9,7 +29,8 @@ const fs = require("fs");
     });
 
     const page = await browser.newPage();
-    await page.goto("https://example.com");
+    // await page.goto("https://example.com");
+    await login();
 
     // Create screenshots directory if not exists
     if (!fs.existsSync("screenshots")) {
@@ -28,3 +49,56 @@ const fs = require("fs");
     process.exit(1);
   }
 })();
+
+async function login(page) {
+  timer.start("login");
+  try {
+    console.log("Navigating to login page...");
+    timer.start("login_navigation");
+    await page.goto(`${CONFIG.BASE_URL}${CONFIG.LOGIN.URL}`, {
+      waitUntil: "networkidle2",
+      timeout: 30000,
+    });
+    timer.end("login_navigation");
+
+    console.log("Entering credentials...");
+    timer.start("login_credentials_entry");
+    await page.waitForSelector(CONFIG.LOGIN.SELECTORS.USERNAME, {
+      visible: true,
+    });
+    await page.type(
+      CONFIG.LOGIN.SELECTORS.USERNAME,
+      process.env.LOGIN_EMAIL || "sellingkhalid@gmail.com",
+      { delay: 30 }
+    );
+
+    await page.waitForSelector(CONFIG.LOGIN.SELECTORS.PASSWORD, {
+      visible: true,
+    });
+    await page.type(
+      CONFIG.LOGIN.SELECTORS.PASSWORD,
+      process.env.LOGIN_PASSWORD || "moiy@1421",
+      { delay: 30 }
+    );
+
+    timer.end("login_credentials_entry");
+    console.log("Submitting login form...");
+    timer.start("login_submission");
+
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "networkidle2" }),
+      page.click(CONFIG.LOGIN.SELECTORS.SUBMIT),
+    ]);
+
+    timer.end("login_submission");
+    console.log("✔ Login successful");
+    timer.end("login");
+
+    return true;
+  } catch (error) {
+    timer.end("login");
+    console.error("Login failed:", error);
+    await page.screenshot({ path: "login-error.png" });
+    throw error;
+  }
+}
