@@ -1,6 +1,45 @@
 const puppeteer = require("puppeteer");
 const fs = require("fs");
 
+class Timer {
+  constructor() {
+    this.metrics = {};
+  }
+
+  start(label) {
+    this.metrics[label] = {
+      start: process.hrtime(),
+      end: null,
+      duration: null,
+    };
+  }
+
+  end(label) {
+    if (!this.metrics[label]) {
+      throw new Error(`Timer label "${label}" not found`);
+    }
+
+    const diff = process.hrtime(this.metrics[label].start);
+    this.metrics[label].end = new Date();
+    this.metrics[label].duration =
+      (diff[0] * 1e3 + diff[1] / 1e6).toFixed(2) + "ms";
+    return this.metrics[label].duration;
+  }
+
+  getMetrics() {
+    return this.metrics;
+  }
+
+  logMetrics() {
+    console.log("\n=== Performance Metrics ===");
+    for (const [label, metric] of Object.entries(this.metrics)) {
+      console.log(`${label}: ${metric.duration}`);
+    }
+    console.log("=========================\n");
+  }
+}
+const timer = new Timer();
+
 const CONFIG = {
   BASE_URL: "https://clients.12livery.ma",
   LOGIN: {
