@@ -123,6 +123,55 @@ const CONFIG = {
     process.exit(1);
   }
 })();
+async function processReturnNote(page, noteId) {
+  const noteUrl = `https://clients.12livery.ma/return-note?action=show&rn-ref=${noteId}`;
+
+  try {
+    await page.goto(noteUrl, {
+      waitUntil: "networkidle2",
+      timeout: 30000,
+    });
+
+    await page.waitForSelector(
+      CONFIG.RETURN_NOTES.SELECTORS.DETAILS_PAGE_INDICATOR,
+      {
+        visible: true,
+        timeout: 15000,
+      }
+    );
+    await page.waitForSelector(CONFIG.RETURN_NOTES.SELECTORS.DROPDOWN, {
+      visible: true,
+    });
+    await page.select(CONFIG.RETURN_NOTES.SELECTORS.DROPDOWN, "50");
+
+    const parcels = await page.$$eval(
+      CONFIG.RETURN_NOTES.SELECTORS.ROWS,
+      (rows) =>
+        rows.map((row) => {
+          const cells = row.querySelectorAll("td");
+          return {
+            parcelNumber: cells[0]?.textContent.trim(),
+            date: cells[2]?.textContent.trim(),
+            city: cells[3]?.textContent.trim(),
+            status: cells[8]?.textContent.trim(),
+          };
+        })
+    );
+
+    return {
+      returnNoteId: noteId,
+      url: noteUrl,
+      parcels: parcels,
+      processedAt: new Date().toISOString(),
+      metrics: {
+        parcelCount: parcels.length,
+        processingDate: new Date().toISOString(),
+      },
+    };
+  } catch (error) {
+    throw error;
+  }
+}
 
 async function getReturnNotes(page) {
   const results = [];
@@ -145,7 +194,6 @@ async function getReturnNotes(page) {
 
     for (const noteId of noteIds) {
       try {
-        // console.log(`Processing return note ${noteId}...`);
         const noteDetails = await processReturnNote(page, noteId);
         results.push(noteDetails);
       } catch (error) {
