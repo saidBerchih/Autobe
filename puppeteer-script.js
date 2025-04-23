@@ -177,22 +177,32 @@ async function saveToFirestore(returnNotes) {
 
   for (const note of returnNotes) {
     const noteRef = notesRef.doc(note.returnNoteId);
-    batch.set(noteRef, {
-      url: note.url,
+
+    // Filter out undefined values from note data
+    const noteData = {
+      url: note.url || null,
       processedAt: new Date().toISOString(),
-      parcelCount: note.parcels.length,
-    });
+      parcelCount: note.parcels?.length || 0,
+    };
+
+    batch.set(noteRef, noteData, { ignoreUndefinedProperties: true });
 
     const parcelsRef = noteRef.collection("parcels");
     for (const parcel of note.parcels) {
-      batch.set(parcelsRef.doc(parcel.parcelNumber), {
-        date: parcel.date,
-        city: parcel.city,
-        status: parcel.status,
+      // Ensure all required fields have values
+      const parcelData = {
+        date: parcel.date || null,
+        city: parcel.city || "Unknown",
+        status: parcel.status || "Unknown",
         lastUpdated: new Date().toISOString(),
+      };
+
+      batch.set(parcelsRef.doc(parcel.parcelNumber), parcelData, {
+        ignoreUndefinedProperties: true,
       });
     }
   }
 
   await batch.commit();
+  console.log(`Saved ${returnNotes.length} notes to Firestore`);
 }
