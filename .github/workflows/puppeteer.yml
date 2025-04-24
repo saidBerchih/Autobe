@@ -40,3 +40,21 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node puppeteer-script.js
+
+      - name: Generate SQL file
+        shell: cmd # Explicitly use Windows command prompt
+        run: |
+          @echo off
+          echo CREATE TABLE IF NOT EXISTS users (id INT, name VARCHAR(255)); > data.sql
+          echo INSERT INTO users VALUES (1, 'John Doe'); >> data.sql
+          echo INSERT INTO users VALUES (2, 'Jane Smith'); >> data.sql
+
+      - name: Commit and push changes
+        shell: cmd # Explicitly use Windows command prompt
+        run: |
+          @echo off
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add data.sql
+          git commit -m "Automated SQL file update"
+          git push

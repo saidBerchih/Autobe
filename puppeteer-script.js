@@ -21,6 +21,15 @@ const CONFIG = {
       TABLE_LOADED: "table.dataTable",
     },
   },
+  INCOICES: {
+    URL: "/invoices",
+    SELECTORS: {
+      ROWS: "table > tbody > tr",
+      DROPDOWN: "select.custom-select",
+      DETAILS_PAGE_INDICATOR: "#rn_added_parcels_table",
+      TABLE_LOADED: "table.dataTable",
+    },
+  },
 };
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
@@ -217,6 +226,65 @@ async function getReturnNotes(page) {
     return results;
   } catch (error) {
     await page.screenshot({ path: "return-notes-error.png" });
+    throw error;
+  }
+}
+async function getInvoices(page) {
+  const results = [];
+
+  try {
+    await page.goto(`${CONFIG.BASE_URL}${CONFIG.INCOICES}`, {
+      waitUntil: "networkidle2",
+      timeout: 30000,
+    });
+
+    await page.waitForSelector(CONFIG.INCOICES.SELECTORS.DROPDOWN, {
+      visible: true,
+    });
+    await page.select(CONFIG.INCOICES.SELECTORS.DROPDOWN, "100");
+
+    const invoiceIds = await page.$$eval(
+      CONFIG.INCOICES.SELECTORS.ROWS,
+      (rows) => rows.map((row) => row.id).filter(Boolean)
+    );
+
+    // Get count from Firestore (1 read operation)
+    const firestoreCount = await db
+      .collection("invoices")
+      .count()
+      .get()
+      .then((snapshot) => snapshot.data().count);
+
+    if (invoiceIds.length === firestoreCount) {
+      console.log("All notes already in Firestore - nothing to process");
+      return [];
+    }
+    const existingDocs = await db
+      .collection("invoices")
+      .select("__name__") // Only retrieve document IDs
+      .get()
+      .then((snapshot) => {
+        console.timeEnd("FirestoreQuery");
+        return snapshot.docs.map((doc) => doc.id);
+      });
+
+    // 3. Find difference using Set operations
+    const existingSet = new Set(existingDocs);
+    const invoicesToProcess = invoiceIds.filter((id) => !existingSet.has(id));
+
+    for (const invoiceId of invoicesToProcess) {
+      try {
+        const invoiceDetails = await processReturnNote(page, invoiceId);
+        results.push(invoiceDetails);
+      } catch (error) {
+        console.error(`Error processing return note ${invoiceId}:`, error);
+        continue;
+      }
+    }
+
+    return results;
+  } catch (error) {
+    await page.screenshot({ path: "invoices-error.png" });
     throw error;
   }
 }
