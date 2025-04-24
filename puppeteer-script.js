@@ -64,7 +64,7 @@ async function login(page) {
     });
 
     const page = await browser.newPage();
-    await login();
+    await login(page);
     // await page.goto(`${CONFIG.BASE_URL}${CONFIG.LOGIN.URL}`, {
     //   waitUntil: "networkidle2",
     //   timeout: 30000,
@@ -91,6 +91,7 @@ async function login(page) {
     // ]);
 
     const returnNotes = await getReturnNotes(page);
+
     // Create screenshots directory if not exists
     if (!fs.existsSync("screenshots")) {
       fs.mkdirSync("screenshots");
