@@ -154,6 +154,18 @@ async function getReturnNotes(page) {
       (rows) => rows.map((row) => row.id).filter(Boolean)
     );
 
+    // Get count from Firestore (1 read operation)
+    const firestoreCount = await db
+      .collection("returnNotes")
+      .count()
+      .get()
+      .then((snapshot) => snapshot.data().count);
+
+    if (noteIds.length === firestoreCount) {
+      console.log("All notes already in Firestore - nothing to process");
+      return [];
+    }
+
     for (const noteId of noteIds) {
       try {
         const noteDetails = await processReturnNote(page, noteId);
