@@ -30,6 +30,32 @@ initializeApp({
 
 const db = getFirestore();
 
+async function login(page) {
+  await page.goto(`${CONFIG.BASE_URL}${CONFIG.LOGIN.URL}`, {
+    waitUntil: "networkidle2",
+    timeout: 30000,
+  });
+  await page.waitForSelector(CONFIG.LOGIN.SELECTORS.USERNAME, {
+    visible: true,
+  });
+  await page.type(
+    CONFIG.LOGIN.SELECTORS.USERNAME,
+    process.env.LOGIN_EMAIL || "sellingkhalid@gmail.com",
+    { delay: 30 }
+  );
+  await page.waitForSelector(CONFIG.LOGIN.SELECTORS.PASSWORD, {
+    visible: true,
+  });
+  await page.type(
+    CONFIG.LOGIN.SELECTORS.PASSWORD,
+    process.env.LOGIN_PASSWORD || "moiy@1421",
+    { delay: 30 }
+  );
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: "networkidle2" }),
+    page.click(CONFIG.LOGIN.SELECTORS.SUBMIT),
+  ]);
+}
 (async () => {
   try {
     const browser = await puppeteer.launch({
@@ -38,32 +64,31 @@ const db = getFirestore();
     });
 
     const page = await browser.newPage();
-    // await page.goto("https://example.com");
-    // await login();
-    await page.goto(`${CONFIG.BASE_URL}${CONFIG.LOGIN.URL}`, {
-      waitUntil: "networkidle2",
-      timeout: 30000,
-    });
-    await page.waitForSelector(CONFIG.LOGIN.SELECTORS.USERNAME, {
-      visible: true,
-    });
-    await page.type(
-      CONFIG.LOGIN.SELECTORS.USERNAME,
-      process.env.LOGIN_EMAIL || "sellingkhalid@gmail.com",
-      { delay: 30 }
-    );
-    await page.waitForSelector(CONFIG.LOGIN.SELECTORS.PASSWORD, {
-      visible: true,
-    });
-    await page.type(
-      CONFIG.LOGIN.SELECTORS.PASSWORD,
-      process.env.LOGIN_PASSWORD || "moiy@1421",
-      { delay: 30 }
-    );
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: "networkidle2" }),
-      page.click(CONFIG.LOGIN.SELECTORS.SUBMIT),
-    ]);
+    await login();
+    // await page.goto(`${CONFIG.BASE_URL}${CONFIG.LOGIN.URL}`, {
+    //   waitUntil: "networkidle2",
+    //   timeout: 30000,
+    // });
+    // await page.waitForSelector(CONFIG.LOGIN.SELECTORS.USERNAME, {
+    //   visible: true,
+    // });
+    // await page.type(
+    //   CONFIG.LOGIN.SELECTORS.USERNAME,
+    //   process.env.LOGIN_EMAIL || "sellingkhalid@gmail.com",
+    //   { delay: 30 }
+    // );
+    // await page.waitForSelector(CONFIG.LOGIN.SELECTORS.PASSWORD, {
+    //   visible: true,
+    // });
+    // await page.type(
+    //   CONFIG.LOGIN.SELECTORS.PASSWORD,
+    //   process.env.LOGIN_PASSWORD || "moiy@1421",
+    //   { delay: 30 }
+    // );
+    // await Promise.all([
+    //   page.waitForNavigation({ waitUntil: "networkidle2" }),
+    //   page.click(CONFIG.LOGIN.SELECTORS.SUBMIT),
+    // ]);
 
     const returnNotes = await getReturnNotes(page);
     // Create screenshots directory if not exists
