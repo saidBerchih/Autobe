@@ -165,8 +165,20 @@ async function getReturnNotes(page) {
       console.log("All notes already in Firestore - nothing to process");
       return [];
     }
+    const existingDocs = await db
+      .collection("returnNotes")
+      .select("__name__") // Only retrieve document IDs
+      .get()
+      .then((snapshot) => {
+        console.timeEnd("FirestoreQuery");
+        return snapshot.docs.map((doc) => doc.id);
+      });
 
-    for (const noteId of noteIds) {
+    // 3. Find difference using Set operations
+    const existingSet = new Set(existingDocs);
+    const notesToProcess = noteIds.filter((id) => !existingSet.has(id));
+
+    for (const noteId of notesToProcess) {
       try {
         const noteDetails = await processReturnNote(page, noteId);
         results.push(noteDetails);
