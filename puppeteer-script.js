@@ -170,7 +170,11 @@ async function getReturnNotes(page) {
     throw error;
   }
 }
-
+function cleanData(obj) {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([_, v]) => v !== undefined)
+  );
+}
 async function saveToFirestore(returnNotes) {
   const batch = db.batch();
   const notesRef = db.collection("returnNotes");
@@ -195,11 +199,7 @@ async function saveToFirestore(returnNotes) {
         status: parcel.status || "Unknown",
         lastUpdated: new Date().toISOString(),
       };
-      function cleanData(obj) {
-        return Object.fromEntries(
-          Object.entries(obj).filter(([_, v]) => v !== undefined)
-        );
-      }
+
       batch.set(parcelsRef.doc(parcel.parcelNumber), parcelData, {
         ignoreUndefinedProperties: true,
       });
