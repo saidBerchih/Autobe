@@ -1,6 +1,3 @@
-rocess.env.FORCE_COLOR = "1";
-process.stdout._handle.setBlocking(true);
-
 import puppeteer from "puppeteer";
 import fs from "fs";
 import { cert, initializeApp } from "firebase-admin/app";
