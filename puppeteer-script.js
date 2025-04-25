@@ -1,8 +1,3 @@
-// const puppeteer = require("puppeteer");
-// const fs = require("fs");
-// const { cert, initializeApp } = require("firebase-admin/app");
-// const { getFirestore } = require("firebase-admin/firestore");
-// const { saveToSQLite } = require("./database.js");
 import puppeteer from "puppeteer";
 import fs from "fs";
 import { cert, initializeApp } from "firebase-admin/app";
@@ -283,7 +278,7 @@ async function getInvoices(page) {
     await page.waitForSelector(CONFIG.INCOICES.SELECTORS.DROPDOWN, {
       visible: true,
     });
-    await page.select(CONFIG.INCOICES.SELECTORS.DROPDOWN, "10");
+    await page.select(CONFIG.INCOICES.SELECTORS.DROPDOWN, "100");
 
     const parcels = await page.$$eval(
       CONFIG.RETURN_NOTES.SELECTORS.ROWS,
