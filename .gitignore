@@ -1,5 +1,5 @@
 # .gitignore additions
-*.json
+
 *.key
 *.pem
 .env
