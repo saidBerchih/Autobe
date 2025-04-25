@@ -332,7 +332,7 @@ async function getInvoices(page) {
 
     await saveToFirestore(returnNotes);
 
-    const invoices = await getInvoices();
+    const invoices = await getInvoices(page);
     await saveToSQLite(invoices);
     await page.screenshot({
       path: "screenshots/example.png",
