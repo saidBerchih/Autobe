@@ -1,4 +1,5 @@
-const sqlite3 = require("sqlite3");
+// const sqlite3 = require("sqlite3");
+import sqlite3 from "sqlite3";
 
 export async function saveToSQLite(invoices) {
   const db = new sqlite3.Database("./invoices.db", (err) => {

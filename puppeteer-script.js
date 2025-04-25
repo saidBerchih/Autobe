@@ -1,8 +1,13 @@
-const puppeteer = require("puppeteer");
-const fs = require("fs");
-const { cert, initializeApp } = require("firebase-admin/app");
-const { getFirestore } = require("firebase-admin/firestore");
-const { saveToSQLite } = require("./database.cjs");
+// const puppeteer = require("puppeteer");
+// const fs = require("fs");
+// const { cert, initializeApp } = require("firebase-admin/app");
+// const { getFirestore } = require("firebase-admin/firestore");
+// const { saveToSQLite } = require("./database.js");
+import puppeteer from "puppeteer";
+import fs from "fs";
+import { cert, initializeApp } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import {} from "./database.js";
 const CONFIG = {
   BASE_URL: "https://clients.12livery.ma",
   LOGIN: {
