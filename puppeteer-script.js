@@ -1,3 +1,6 @@
+rocess.env.FORCE_COLOR = "1";
+process.stdout._handle.setBlocking(true);
+
 import puppeteer from "puppeteer";
 import fs from "fs";
 import { cert, initializeApp } from "firebase-admin/app";
@@ -41,6 +44,7 @@ initializeApp({
 const db = getFirestore();
 
 async function login(page) {
+  console.log("login");
   await page.goto(`${CONFIG.BASE_URL}${CONFIG.LOGIN.URL}`, {
     waitUntil: "networkidle2",
     timeout: 30000,
