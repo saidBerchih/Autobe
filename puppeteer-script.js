@@ -236,7 +236,7 @@ async function processInvoices(page, note) {
 
     // 3. Extract data
     const parcels = await page.$$eval(
-      ".row> .table-responsive > table > tbody > tr",
+      CONFIG.RETURN_NOTES.SELECTORS.ROWS,
       (rows) =>
         rows
           .map((row) => {
