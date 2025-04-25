@@ -227,6 +227,7 @@ async function processInvoices(page, note) {
         timeout: 30000,
       }
     );
+    await page.waitForTimeout(2000);
 
     // 2. Wait for modal content to load
     await page.waitForSelector(".row> .table-responsive > table ", {
