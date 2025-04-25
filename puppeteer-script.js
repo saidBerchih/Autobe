@@ -233,7 +233,7 @@ async function processInvoices(page, note) {
     // 2. Wait for modal content to load
     await page.waitForSelector("#ajaxResultModal.fade.show", {
       visible: true,
-      timeout: 15000,
+      timeout: 35000,
     });
 
     // 3. Extract data
