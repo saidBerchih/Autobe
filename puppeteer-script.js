@@ -65,61 +65,7 @@ async function login(page) {
     page.click(CONFIG.LOGIN.SELECTORS.SUBMIT),
   ]);
 }
-(async () => {
-  try {
-    const browser = await puppeteer.launch({
-      headless: "new",
-      args: ["--no-sandbox"],
-    });
 
-    const page = await browser.newPage();
-    await login(page);
-    // await page.goto(`${CONFIG.BASE_URL}${CONFIG.LOGIN.URL}`, {
-    //   waitUntil: "networkidle2",
-    //   timeout: 30000,
-    // });
-    // await page.waitForSelector(CONFIG.LOGIN.SELECTORS.USERNAME, {
-    //   visible: true,
-    // });
-    // await page.type(
-    //   CONFIG.LOGIN.SELECTORS.USERNAME,
-    //   process.env.LOGIN_EMAIL || "sellingkhalid@gmail.com",
-    //   { delay: 30 }
-    // );
-    // await page.waitForSelector(CONFIG.LOGIN.SELECTORS.PASSWORD, {
-    //   visible: true,
-    // });
-    // await page.type(
-    //   CONFIG.LOGIN.SELECTORS.PASSWORD,
-    //   process.env.LOGIN_PASSWORD || "moiy@1421",
-    //   { delay: 30 }
-    // );
-    // await Promise.all([
-    //   page.waitForNavigation({ waitUntil: "networkidle2" }),
-    //   page.click(CONFIG.LOGIN.SELECTORS.SUBMIT),
-    // ]);
-
-    const returnNotes = await getReturnNotes(page);
-
-    // Create screenshots directory if not exists
-    if (!fs.existsSync("screenshots")) {
-      fs.mkdirSync("screenshots");
-    }
-
-    await saveToFirestore(returnNotes);
-
-    await page.screenshot({
-      path: "screenshots/example.png",
-      fullPage: true,
-    });
-
-    console.log("Screenshot saved to screenshots/example.png");
-    await browser.close();
-  } catch (error) {
-    console.error("Error:", error);
-    process.exit(1);
-  }
-})();
 async function processReturnNote(page, noteId) {
   const noteUrl = `https://clients.12livery.ma/return-note?action=show&rn-ref=${noteId}`;
 
@@ -229,65 +175,7 @@ async function getReturnNotes(page) {
     throw error;
   }
 }
-async function getInvoices(page) {
-  const results = [];
 
-  try {
-    await page.goto(`${CONFIG.BASE_URL}${CONFIG.INCOICES}`, {
-      waitUntil: "networkidle2",
-      timeout: 30000,
-    });
-
-    await page.waitForSelector(CONFIG.INCOICES.SELECTORS.DROPDOWN, {
-      visible: true,
-    });
-    await page.select(CONFIG.INCOICES.SELECTORS.DROPDOWN, "100");
-
-    const invoiceIds = await page.$$eval(
-      CONFIG.INCOICES.SELECTORS.ROWS,
-      (rows) => rows.map((row) => row.id).filter(Boolean)
-    );
-
-    // Get count from Firestore (1 read operation)
-    const firestoreCount = await db
-      .collection("invoices")
-      .count()
-      .get()
-      .then((snapshot) => snapshot.data().count);
-
-    if (invoiceIds.length === firestoreCount) {
-      console.log("All notes already in Firestore - nothing to process");
-      return [];
-    }
-    const existingDocs = await db
-      .collection("invoices")
-      .select("__name__") // Only retrieve document IDs
-      .get()
-      .then((snapshot) => {
-        console.timeEnd("FirestoreQuery");
-        return snapshot.docs.map((doc) => doc.id);
-      });
-
-    // 3. Find difference using Set operations
-    const existingSet = new Set(existingDocs);
-    const invoicesToProcess = invoiceIds.filter((id) => !existingSet.has(id));
-
-    for (const invoiceId of invoicesToProcess) {
-      try {
-        const invoiceDetails = await processReturnNote(page, invoiceId);
-        results.push(invoiceDetails);
-      } catch (error) {
-        console.error(`Error processing return note ${invoiceId}:`, error);
-        continue;
-      }
-    }
-
-    return results;
-  } catch (error) {
-    await page.screenshot({ path: "invoices-error.png" });
-    throw error;
-  }
-}
 function cleanData(obj) {
   return Object.fromEntries(
     Object.entries(obj).filter(([_, v]) => v !== undefined)
@@ -327,3 +215,132 @@ async function saveToFirestore(returnNotes) {
   await batch.commit();
   console.log(`Saved ${returnNotes.length} notes to Firestore`);
 }
+//// invoices
+async function processInvoices(page, note) {
+  try {
+    // 1. Open the modal
+    await page.goto(`${CONFIG.BASE_URL}${CONFIG.RETURN_NOTES.URL}`, {
+      waitUntil: "networkidle2",
+      timeout: 30000,
+    });
+    await page.waitForSelector(`tr#${note.invoiceId} .btn.btn-sm.btn-primary`, {
+      timeout: 10000,
+      visible: true,
+    });
+    await page.click(`tr#${note.invoiceId} .btn.btn-sm.btn-primary`);
+
+    // 2. Wait for modal content to load
+    await page.waitForSelector("#ajaxResultModal.fade.show", {
+      visible: true,
+      timeout: 15000,
+    });
+
+    // 3. Extract data
+    const parcels = await page.$$eval(
+      ".modal-body > .row> .table-responsive > table > tbody > tr",
+      (rows) =>
+        rows
+          .map((row) => {
+            const cells = row.querySelectorAll("td");
+            if (!cells[4]?.textContent?.trim()) return;
+            return {
+              parcelsNumber: cells[1]?.textContent?.trim() || "N/A",
+              status: cells[4]?.textContent?.trim() || "N/A",
+              city: cells[5]?.textContent?.trim() || "N/A",
+              total: cells[8]?.textContent?.trim().replace("DH", "") || "N/A",
+            };
+          })
+          .filter((a) => a)
+    );
+
+    await page.keyboard.press("Escape");
+    return {
+      ...note,
+      ["parcels"]: parcels,
+    };
+  } catch (error) {
+    console.error(`Error processing note ${note.invoiceId}:`, error);
+    await page.screenshot({
+      path: `error-${note.invoiceId}-${Date.now()}.png`,
+    });
+    throw error;
+  }
+}
+async function getInvoices(page) {
+  const results = [];
+
+  try {
+    await page.goto(`${CONFIG.BASE_URL}${CONFIG.RETURN_NOTES.URL}`, {
+      waitUntil: "networkidle2",
+      timeout: 30000,
+    });
+    await page.waitForSelector(CONFIG.RETURN_NOTES.SELECTORS.DROPDOWN, {
+      visible: true,
+    });
+    await page.select(CONFIG.RETURN_NOTES.SELECTORS.DROPDOWN, "10");
+
+    const parcels = await page.$$eval(
+      CONFIG.RETURN_NOTES.SELECTORS.ROWS,
+      (rows) =>
+        rows.map((row) => {
+          const cells = row.querySelectorAll("td");
+          return {
+            invoiceId: cells[0]?.textContent.trim(),
+            date: cells[4]?.textContent.trim(),
+            status: cells[8]?.textContent.trim(),
+            parcelsNumber: cells[5]?.textContent.trim(),
+            total: cells[6]?.textContent.trim(),
+          };
+        })
+    );
+
+    for (const note of parcels) {
+      try {
+        const noteDetails = await processInvoices(page, note);
+        results.push(noteDetails);
+      } catch (error) {
+        console.error(`Error processing return note ${noteId}:`, error);
+        continue;
+      }
+    }
+    return results;
+  } catch (error) {
+    console.error("Error in getReturnNotes:", error);
+    await page.screenshot({ path: "return-notes-error.png" });
+    throw error;
+  }
+}
+
+/// the main function
+(async () => {
+  try {
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: ["--no-sandbox"],
+    });
+
+    const page = await browser.newPage();
+    await login(page);
+
+    const returnNotes = await getReturnNotes(page);
+
+    // Create screenshots directory if not exists
+    if (!fs.existsSync("screenshots")) {
+      fs.mkdirSync("screenshots");
+    }
+
+    await saveToFirestore(returnNotes);
+
+    const invoices = await getInvoices();
+    await page.screenshot({
+      path: "screenshots/example.png",
+      fullPage: true,
+    });
+
+    console.log("Screenshot saved to screenshots/example.png");
+    await browser.close();
+  } catch (error) {
+    console.error("Error:", error);
+    process.exit(1);
+  }
+})();
