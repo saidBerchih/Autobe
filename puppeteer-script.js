@@ -7,7 +7,7 @@ import puppeteer from "puppeteer";
 import fs from "fs";
 import { cert, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import {} from "./database.js";
+import { saveToSQLite } from "./database.js";
 const CONFIG = {
   BASE_URL: "https://clients.12livery.ma",
   LOGIN: {
