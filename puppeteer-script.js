@@ -229,10 +229,10 @@ async function processInvoices(page, note) {
     );
 
     // 2. Wait for modal content to load
-    await page.waitForSelector(".row> .table-responsive > table ", {
-      visible: true,
-      timeout: 15000,
-    });
+    // await page.waitForSelector(".row> .table-responsive > table ", {
+    //   visible: true,
+    //   timeout: 15000,
+    // });
 
     // 3. Extract data
     const parcels = await page.$$eval(
