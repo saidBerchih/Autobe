@@ -266,6 +266,8 @@ async function processInvoices(page, note) {
   }
 }
 async function getInvoices(page) {
+  console.log("geting invoices");
+
   const results = [];
 
   try {
@@ -292,10 +294,14 @@ async function getInvoices(page) {
           };
         })
     );
+    console.log("invoices :");
+    console.log(parcels);
 
     for (const note of parcels) {
       try {
-        console.log("parcel" + note.invoiceId);
+        console.log("note.invoiceId : ");
+
+        console.log(note.invoiceId);
 
         const noteDetails = await processInvoices(page, note);
         results.push(noteDetails);
