@@ -221,7 +221,7 @@ async function processInvoices(page, note) {
   try {
     // 1. Open the modal
     await page.goto(
-      `${CONFIG.BASE_URL}${CONFIG.RETURN_NOTES.URL}?action=show&inv-ref=${note.invoiceId}`,
+      `${CONFIG.BASE_URL}${CONFIG.INCOICES.URL}?action=show&inv-ref=${note.invoiceId}`,
       {
         waitUntil: "networkidle2",
         timeout: 30000,
