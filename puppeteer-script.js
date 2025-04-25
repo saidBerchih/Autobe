@@ -300,7 +300,6 @@ async function getInvoices(page) {
         const noteDetails = await processInvoices(page, note);
         results.push(noteDetails);
       } catch (error) {
-        console.error(`Error processing return note ${noteId}:`, error);
         continue;
       }
     }
