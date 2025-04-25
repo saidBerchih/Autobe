@@ -2,6 +2,7 @@ const puppeteer = require("puppeteer");
 const fs = require("fs");
 const { cert, initializeApp } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
+const { saveToSQLite } = require("./database.js");
 const CONFIG = {
   BASE_URL: "https://clients.12livery.ma",
   LOGIN: {
@@ -332,6 +333,7 @@ async function getInvoices(page) {
     await saveToFirestore(returnNotes);
 
     const invoices = await getInvoices();
+    await saveToSQLite(invoices);
     await page.screenshot({
       path: "screenshots/example.png",
       fullPage: true,
