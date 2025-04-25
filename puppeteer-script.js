@@ -16,7 +16,7 @@ const CONFIG = {
   RETURN_NOTES: {
     URL: "/return-note",
     SELECTORS: {
-      ROWS: "table > tbody > tr",
+      ROWS: ".row > table-responsive > table > tbody > tr",
       DROPDOWN: "select.custom-select",
       DETAILS_PAGE_INDICATOR: "#rn_added_parcels_table",
       TABLE_LOADED: "table.dataTable",
@@ -229,27 +229,25 @@ async function processInvoices(page, note) {
     );
 
     // 2. Wait for modal content to load
-    // await page.waitForSelector(".row> .table-responsive > table ", {
-    //   visible: true,
-    //   timeout: 15000,
-    // });
+    await page.waitForSelector(".row> .table-responsive > table ", {
+      visible: true,
+      timeout: 15000,
+    });
 
     // 3. Extract data
-    const parcels = await page.$$eval(
-      CONFIG.RETURN_NOTES.SELECTORS.ROWS,
-      (rows) =>
-        rows
-          .map((row) => {
-            const cells = row.querySelectorAll("td");
-            if (!cells[4]?.textContent?.trim()) return;
-            return {
-              parcelsNumber: cells[1]?.textContent?.trim() || "N/A",
-              status: cells[4]?.textContent?.trim() || "N/A",
-              city: cells[5]?.textContent?.trim() || "N/A",
-              total: cells[8]?.textContent?.trim().replace("DH", "") || "N/A",
-            };
-          })
-          .filter((a) => a)
+    const parcels = await page.$$eval("table > tbody > tr", (rows) =>
+      rows
+        .map((row) => {
+          const cells = row.querySelectorAll("td");
+          if (!cells[4]?.textContent?.trim()) return;
+          return {
+            parcelsNumber: cells[1]?.textContent?.trim() || "N/A",
+            status: cells[4]?.textContent?.trim() || "N/A",
+            city: cells[5]?.textContent?.trim() || "N/A",
+            total: cells[8]?.textContent?.trim().replace("DH", "") || "N/A",
+          };
+        })
+        .filter((a) => a)
     );
 
     return {
@@ -329,7 +327,9 @@ async function getInvoices(page) {
     // await saveToFirestore(returnNotes);
 
     const invoices = await getInvoices(page);
+
     await saveToSQLite(invoices);
+
     await page.screenshot({
       path: "screenshots/example.png",
       fullPage: true,
