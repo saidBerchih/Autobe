@@ -25,7 +25,7 @@ const CONFIG = {
   INCOICES: {
     URL: "/invoices",
     SELECTORS: {
-      ROWS: "table > tbody > tr",
+      ROWS: "table#inv_table > tbody > tr",
       DROPDOWN: "select.custom-select",
       DETAILS_PAGE_INDICATOR: "#rn_added_parcels_table",
       TABLE_LOADED: "table.dataTable",
@@ -280,19 +280,17 @@ async function getInvoices(page) {
     });
     await page.select(CONFIG.INCOICES.SELECTORS.DROPDOWN, "100");
 
-    const parcels = await page.$$eval(
-      CONFIG.RETURN_NOTES.SELECTORS.ROWS,
-      (rows) =>
-        rows.map((row) => {
-          const cells = row.querySelectorAll("td");
-          return {
-            invoiceId: cells[0]?.textContent.trim(),
-            date: cells[4]?.textContent.trim(),
-            status: cells[8]?.textContent.trim(),
-            parcelsNumber: cells[5]?.textContent.trim(),
-            total: cells[6]?.textContent.trim(),
-          };
-        })
+    const parcels = await page.$$eval(CONFIG.INCOICES.SELECTORS.ROWS, (rows) =>
+      rows.map((row) => {
+        const cells = row.querySelectorAll("td");
+        return {
+          invoiceId: cells[0]?.textContent.trim(),
+          date: cells[4]?.textContent.trim(),
+          status: cells[8]?.textContent.trim(),
+          parcelsNumber: cells[5]?.textContent.trim(),
+          total: cells[6]?.textContent.trim(),
+        };
+      })
     );
     console.log("invoices :");
     console.log(parcels);
