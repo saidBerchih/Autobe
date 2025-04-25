@@ -220,7 +220,7 @@ async function saveToFirestore(returnNotes) {
 async function processInvoices(page, note) {
   try {
     // 1. Open the modal
-    await page.goto(`${CONFIG.BASE_URL}${CONFIG.RETURN_NOTES.URL}`, {
+    await page.goto(`${CONFIG.BASE_URL}${CONFIG.INCOICES.URL}`, {
       waitUntil: "networkidle2",
       timeout: 30000,
     });
@@ -271,14 +271,14 @@ async function getInvoices(page) {
   const results = [];
 
   try {
-    await page.goto(`${CONFIG.BASE_URL}${CONFIG.RETURN_NOTES.URL}`, {
+    await page.goto(`${CONFIG.BASE_URL}${CONFIG.INCOICES.URL}`, {
       waitUntil: "networkidle2",
       timeout: 30000,
     });
-    await page.waitForSelector(CONFIG.RETURN_NOTES.SELECTORS.DROPDOWN, {
+    await page.waitForSelector(CONFIG.INCOICES.SELECTORS.DROPDOWN, {
       visible: true,
     });
-    await page.select(CONFIG.RETURN_NOTES.SELECTORS.DROPDOWN, "10");
+    await page.select(CONFIG.INCOICES.SELECTORS.DROPDOWN, "10");
 
     const parcels = await page.$$eval(
       CONFIG.RETURN_NOTES.SELECTORS.ROWS,
