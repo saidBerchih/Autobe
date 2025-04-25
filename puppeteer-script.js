@@ -278,7 +278,7 @@ async function getInvoices(page) {
     await page.waitForSelector(CONFIG.INCOICES.SELECTORS.DROPDOWN, {
       visible: true,
     });
-    await page.select(CONFIG.INCOICES.SELECTORS.DROPDOWN, "100");
+    await page.select(CONFIG.INCOICES.SELECTORS.DROPDOWN, "10");
 
     const parcels = await page.$$eval(
       CONFIG.RETURN_NOTES.SELECTORS.ROWS,
