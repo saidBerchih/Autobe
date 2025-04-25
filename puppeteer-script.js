@@ -322,14 +322,14 @@ async function getInvoices(page) {
     const page = await browser.newPage();
     await login(page);
 
-    const returnNotes = await getReturnNotes(page);
+    // const returnNotes = await getReturnNotes(page);
 
     // Create screenshots directory if not exists
     if (!fs.existsSync("screenshots")) {
       fs.mkdirSync("screenshots");
     }
 
-    await saveToFirestore(returnNotes);
+    // await saveToFirestore(returnNotes);
 
     const invoices = await getInvoices(page);
     await saveToSQLite(invoices);
