@@ -220,25 +220,23 @@ async function saveToFirestore(returnNotes) {
 async function processInvoices(page, note) {
   try {
     // 1. Open the modal
-    await page.goto(`${CONFIG.BASE_URL}${CONFIG.INCOICES.URL}`, {
-      waitUntil: "networkidle2",
-      timeout: 30000,
-    });
-    await page.waitForSelector(`tr#${note.invoiceId} .btn.btn-sm.btn-primary`, {
-      timeout: 10000,
-      visible: true,
-    });
-    await page.click(`tr#${note.invoiceId} .btn.btn-sm.btn-primary`);
+    await page.goto(
+      `${CONFIG.BASE_URL}${CONFIG.RETURN_NOTES.URL}?action=show&inv-ref=${note.invoiceId}`,
+      {
+        waitUntil: "networkidle2",
+        timeout: 30000,
+      }
+    );
 
     // 2. Wait for modal content to load
-    await page.waitForSelector("#ajaxResultModal.fade.show", {
+    await page.waitForSelector(".row> .table-responsive > table ", {
       visible: true,
-      timeout: 35000,
+      timeout: 15000,
     });
 
     // 3. Extract data
     const parcels = await page.$$eval(
-      ".modal-body > .row> .table-responsive > table > tbody > tr",
+      ".row> .table-responsive > table > tbody > tr",
       (rows) =>
         rows
           .map((row) => {
@@ -254,7 +252,6 @@ async function processInvoices(page, note) {
           .filter((a) => a)
     );
 
-    await page.keyboard.press("Escape");
     return {
       ...note,
       ["parcels"]: parcels,
