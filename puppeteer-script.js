@@ -2,7 +2,7 @@ const puppeteer = require("puppeteer");
 const fs = require("fs");
 const { cert, initializeApp } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
-const { saveToSQLite } = require("./database.js");
+const { saveToSQLite } = require("./database.cjs");
 const CONFIG = {
   BASE_URL: "https://clients.12livery.ma",
   LOGIN: {
