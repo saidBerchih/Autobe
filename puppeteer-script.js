@@ -219,6 +219,7 @@ async function saveToFirestore(returnNotes) {
 //// invoices
 async function processInvoices(page, note) {
   try {
+    console.log("note" + note.invoiceId);
     // 1. Open the modal
     await page.goto(
       `${CONFIG.BASE_URL}${CONFIG.INCOICES.URL}?action=show&inv-ref=${note.invoiceId}`,
@@ -293,6 +294,8 @@ async function getInvoices(page) {
 
     for (const note of parcels) {
       try {
+        console.log("parcel" + note.invoiceId);
+
         const noteDetails = await processInvoices(page, note);
         results.push(noteDetails);
       } catch (error) {
