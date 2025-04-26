@@ -88,7 +88,7 @@ export async function saveToSQLite(invoices) {
     db.close();
   }
 }
-async function saveInvoicesToFirestore(invoices) {
+export async function saveInvoicesToFirestore(invoices) {
   const batch = db.batch();
   const invoicesRef = db.collection("invoices");
 
