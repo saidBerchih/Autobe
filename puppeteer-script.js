@@ -2,7 +2,7 @@ import puppeteer from "puppeteer";
 import fs from "fs";
 import { cert, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { getUnsyncedInvoiceIds, saveToSQLite } from "./database.js";
+import { getSyncedInvoiceIds, saveToSQLite } from "./database.js";
 const CONFIG = {
   BASE_URL: "https://clients.12livery.ma",
   LOGIN: {
@@ -278,13 +278,10 @@ async function getInvoices(page) {
       visible: true,
     });
     await page.select(CONFIG.INCOICES.SELECTORS.DROPDOWN, "100");
-    const unsyncedInvoiceIds = await getUnsyncedInvoiceIds();
 
-    if (unsyncedInvoiceIds.length === 0) {
-      console.log("No unsynced invoices found, you are all set :)");
-      return [];
-    }
-    const invoices = await page.$$eval(
+    const syncedInvoiceIds = await getSyncedInvoiceIds();
+
+    const unsyncedInvoices = await page.$$eval(
       CONFIG.INCOICES.SELECTORS.ROWS,
       (rows, idsJSON) => {
         const idSet = new Set(JSON.parse(idsJSON));
@@ -292,7 +289,7 @@ async function getInvoices(page) {
           .map((row) => {
             const cells = row.querySelectorAll("td");
             const invoiceId = cells[0]?.textContent.trim();
-            return idSet.has(invoiceId)
+            return !idSet.has(invoiceId) // Changed to check for NON-synced invoices
               ? {
                   invoiceId,
                   date: cells[4]?.textContent.trim(),
@@ -302,13 +299,13 @@ async function getInvoices(page) {
                 }
               : null;
           })
-          .filter(Boolean);
+          .filter(Boolean); // Fixed: Keep only truthy values (non-null)
       },
-      JSON.stringify(unsyncedInvoiceIds)
+      JSON.stringify(syncedInvoiceIds)
     );
-    console.log(`Found ${invoices.length} unsynced invoices to process`);
+    console.log(`Found ${invoices.length} synced invoices to process`);
 
-    for (const note of invoices) {
+    for (const note of unsyncedInvoices) {
       try {
         console.log("note.invoiceId : ");
 
@@ -350,7 +347,7 @@ async function getInvoices(page) {
 
     const invoices = await getInvoices(page);
 
-    await saveToSQLite(invoices);
+    // await saveToSQLite(invoices);
 
     await page.screenshot({
       path: "screenshots/example.png",

@@ -139,7 +139,8 @@ export async function saveInvoicesToFirestore(invoices) {
     throw error;
   }
 }
-export async function getUnsyncedInvoiceIds() {
+export async function getSyncedInvoiceIds() {
+  // gets the orders that are in firestore
   try {
     // Check if database file exists
     if (!fs.existsSync("./invoices.db")) {
@@ -151,7 +152,7 @@ export async function getUnsyncedInvoiceIds() {
 
     const ids = await new Promise((resolve, reject) => {
       db.all(
-        "SELECT invoice_id FROM invoices WHERE synced_to_firebase = 0",
+        "SELECT invoice_id FROM invoices WHERE synced_to_firebase = 1",
         (err, rows) => {
           db.close(); // Always close connection
           if (err) {
@@ -166,7 +167,7 @@ export async function getUnsyncedInvoiceIds() {
 
     return ids;
   } catch (error) {
-    console.error("Error in getUnsyncedInvoiceIds:", error.message);
+    console.error("Error in getSyncedInvoiceIds:", error.message);
     return []; // Return empty array on any failure
   }
 }
