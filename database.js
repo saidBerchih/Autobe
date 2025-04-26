@@ -2,21 +2,12 @@ import sqlite3 from "sqlite3";
 import fs from "fs";
 import { getFirestore } from "firebase-admin/firestore";
 
-// Helper function to run SQLite queries with proper cleanup
-async function runQuery(db, sql, params = []) {
+// Helper function to run SQLite queries
+function runQuery(db, sql, params = []) {
   return new Promise((resolve, reject) => {
-    const stmt = db.prepare(sql, params, function (err) {
-      if (err) return reject(err);
-
-      stmt.run(params, function (runErr) {
-        if (runErr) {
-          stmt.finalize(); // Always finalize on error
-          return reject(runErr);
-        }
-
-        stmt.finalize(); // Finalize after successful run
-        resolve(this);
-      });
+    db.run(sql, params, function (err) {
+      if (err) reject(err);
+      else resolve(this);
     });
   });
 }
@@ -58,46 +49,38 @@ export async function saveToSQLite(invoices) {
     // Begin transaction
     await runQuery(db, "BEGIN TRANSACTION");
 
-    const invoiceStmt = db.prepare(
-      `INSERT OR IGNORE INTO invoices 
+    // Prepare statements
+    const invoiceSql = `INSERT OR IGNORE INTO invoices 
       (invoice_id, date, parcels_count, total_amount)
-      VALUES (?, ?, ?, ?)`
-    );
+      VALUES (?, ?, ?, ?)`;
 
-    const parcelStmt = db.prepare(
-      `INSERT OR IGNORE INTO parcels
+    const parcelSql = `INSERT OR IGNORE INTO parcels
       (parcel_id, invoice_id, status, city, amount)
-      VALUES (?, ?, ?, ?, ?)`
-    );
+      VALUES (?, ?, ?, ?, ?)`;
 
-    try {
-      for (const invoice of invoices) {
-        await runQuery(invoiceStmt, [
-          invoice.invoiceId,
-          invoice.date,
-          parseInt(invoice.parcelsNumber) || 0,
-          parseFloat(invoice.total.replace("DH", "")) || 0,
-        ]);
+    for (const invoice of invoices) {
+      await runQuery(db, invoiceSql, [
+        invoice.invoiceId,
+        invoice.date,
+        parseInt(invoice.parcelsNumber) || 0,
+        parseFloat(invoice.total.replace("DH", "")) || 0,
+      ]);
 
-        if (invoice.parcels?.length > 0) {
-          for (const parcel of invoice.parcels) {
-            await runQuery(parcelStmt, [
-              parcel.parcelsNumber,
-              invoice.invoiceId,
-              parcel.status,
-              parcel.city,
-              parseFloat(parcel.total) || 0,
-            ]);
-          }
+      if (invoice.parcels?.length > 0) {
+        for (const parcel of invoice.parcels) {
+          await runQuery(db, parcelSql, [
+            parcel.parcelsNumber,
+            invoice.invoiceId,
+            parcel.status,
+            parcel.city,
+            parseFloat(parcel.total) || 0,
+          ]);
         }
       }
-
-      await runQuery(db, "COMMIT");
-      console.log(`✅ Saved ${invoices.length} invoices to SQLite`);
-    } finally {
-      invoiceStmt.finalize();
-      parcelStmt.finalize();
     }
+
+    await runQuery(db, "COMMIT");
+    console.log(`✅ Saved ${invoices.length} invoices to SQLite`);
   } catch (error) {
     try {
       await runQuery(db, "ROLLBACK");
@@ -115,14 +98,11 @@ export async function saveInvoicesToFirestore(invoices) {
   let sqliteDb;
 
   try {
-    // Initialize SQLite database with busy timeout
+    // Initialize SQLite database
     sqliteDb = await new Promise((resolve, reject) => {
       const db = new sqlite3.Database("./invoices.db", (err) => {
-        if (err) return reject(err);
-
-        // Set busy timeout to handle concurrent access
-        db.configure("busyTimeout", 5000);
-        resolve(db);
+        if (err) reject(err);
+        else resolve(db);
       });
     });
 
@@ -189,23 +169,22 @@ export async function saveInvoicesToFirestore(invoices) {
 }
 
 async function updateSyncStatus(db, invoices) {
-  let invoiceStmt, parcelStmt;
-
   try {
     await runQuery(db, "BEGIN TRANSACTION");
 
-    invoiceStmt = db.prepare(
-      "UPDATE invoices SET synced_to_firebase = 1 WHERE invoice_id = ?"
-    );
-    parcelStmt = db.prepare(
-      "UPDATE parcels SET synced_to_firebase = 1 WHERE invoice_id = ?"
-    );
-
     for (const invoice of invoices) {
-      await runQuery(invoiceStmt, [invoice.invoiceId]);
+      await runQuery(
+        db,
+        "UPDATE invoices SET synced_to_firebase = 1 WHERE invoice_id = ?",
+        [invoice.invoiceId]
+      );
 
       if (invoice.parcels?.length) {
-        await runQuery(parcelStmt, [invoice.invoiceId]);
+        await runQuery(
+          db,
+          "UPDATE parcels SET synced_to_firebase = 1 WHERE invoice_id = ?",
+          [invoice.invoiceId]
+        );
       }
     }
 
@@ -218,9 +197,6 @@ async function updateSyncStatus(db, invoices) {
       console.error("Rollback failed:", rollbackError);
     }
     throw error;
-  } finally {
-    if (invoiceStmt) invoiceStmt.finalize();
-    if (parcelStmt) parcelStmt.finalize();
   }
 }
 
