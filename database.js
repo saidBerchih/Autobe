@@ -140,29 +140,37 @@ export async function saveInvoicesToFirestore(invoices) {
   }
 }
 export async function getUnsyncedInvoiceIds() {
-  const db = new sqlite3.Database("./invoices.db");
-
   try {
-    const invoiceIds = await new Promise((resolve, reject) => {
+    // Check if database file exists
+    if (!fs.existsSync("./invoices.db")) {
+      console.log("Database doesn't exist yet - returning empty array");
+      return [];
+    }
+
+    const db = new sqlite3.Database("./invoices.db");
+
+    const ids = await new Promise((resolve, reject) => {
       db.all(
         "SELECT invoice_id FROM invoices WHERE synced_to_firebase = 0",
         (err, rows) => {
+          db.close(); // Always close connection
           if (err) {
-            reject(err);
+            console.error("Database error:", err.message);
+            resolve([]); // Return empty array on error
           } else {
-            // Extract just the IDs from the rows
-            const ids = rows.map((row) => row.invoice_id);
-            resolve(ids);
+            resolve(rows?.map((row) => row.invoice_id) || []);
           }
         }
       );
     });
 
-    return invoiceIds || []; // Always return an array (empty if no results)
-  } finally {
-    db.close();
+    return ids;
+  } catch (error) {
+    console.error("Error in getUnsyncedInvoiceIds:", error.message);
+    return []; // Return empty array on any failure
   }
 }
+
 // Helper function to run queries with promises
 function runQuery(db, sql, params = []) {
   return new Promise((resolve, reject) => {
