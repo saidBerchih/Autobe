@@ -303,7 +303,7 @@ async function getInvoices(page) {
       },
       JSON.stringify(syncedInvoiceIds)
     );
-    console.log(`Found ${invoices.length} synced invoices to process`);
+    console.log(`Found ${unsyncedInvoices.length} synced invoices to process`);
 
     for (const note of unsyncedInvoices) {
       try {
