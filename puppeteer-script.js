@@ -349,7 +349,10 @@ async function getInvoices(page) {
 
     const invoices = await getInvoices(page);
 
+    // Save to SQLite first
     await saveToSQLite(invoices);
+
+    // Then sync to Firestore
     await saveInvoicesToFirestore(invoices);
 
     await page.screenshot({
