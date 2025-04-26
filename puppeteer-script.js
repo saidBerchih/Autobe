@@ -2,7 +2,11 @@ import puppeteer from "puppeteer";
 import fs from "fs";
 import { cert, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { getSyncedInvoiceIds, saveToSQLite } from "./database.js";
+import {
+  getSyncedInvoiceIds,
+  saveToSQLite,
+  saveInvoicesToFirestore,
+} from "./database.js";
 const CONFIG = {
   BASE_URL: "https://clients.12livery.ma",
   LOGIN: {
@@ -305,14 +309,12 @@ async function getInvoices(page) {
     );
     console.log(`Found ${unsyncedInvoices.length} synced invoices to process`);
 
-    for (const note of unsyncedInvoices) {
+    for (const invoice of unsyncedInvoices) {
       try {
-        console.log("note.invoiceId : ");
-
-        console.log(note.invoiceId);
-
-        const noteDetails = await processInvoices(page, note);
-        results.push(noteDetails);
+        console.log("invoice.invoiceId : ");
+        console.log(invoice.invoiceId);
+        const invoiceDetails = await processInvoices(page, invoice);
+        results.push(invoiceDetails);
       } catch (error) {
         continue;
       }
@@ -347,7 +349,8 @@ async function getInvoices(page) {
 
     const invoices = await getInvoices(page);
 
-    // await saveToSQLite(invoices);
+    await saveToSQLite(invoices);
+    await saveInvoicesToFirestore(invoices);
 
     await page.screenshot({
       path: "screenshots/example.png",

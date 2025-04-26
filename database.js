@@ -45,10 +45,10 @@ export async function saveToSQLite(invoices) {
       await runQuery(
         db,
         `
-        INSERT OR REPLACE INTO invoices 
-        (invoice_id, date, parcels_count, total_amount)
-        VALUES (?, ?, ?, ?,?)
-      `,
+        INSERT OR IGNORE INTO invoices 
+        (invoice_id, date, parcels_count, total_amount, is_synced)
+        VALUES (?, ?, ?, ?, ?)
+        `,
         [
           invoice.invoiceId,
           invoice.date,
@@ -58,16 +58,16 @@ export async function saveToSQLite(invoices) {
         ]
       );
 
-      // Insert parcels if they exist
+      // Insert parcels only if they don't exist
       if (invoice.parcels && invoice.parcels.length > 0) {
         for (const parcel of invoice.parcels) {
           await runQuery(
             db,
             `
-            INSERT OR REPLACE INTO parcels
+            INSERT OR IGNORE INTO parcels
             (parcel_id, invoice_id, status, city, amount)
             VALUES (?, ?, ?, ?, ?)
-          `,
+            `,
             [
               parcel.parcelsNumber,
               invoice.invoiceId,
@@ -90,55 +90,108 @@ export async function saveToSQLite(invoices) {
   }
 }
 export async function saveInvoicesToFirestore(invoices) {
-  const batch = db.batch();
-  const invoicesRef = db.collection("invoices");
+  let sqliteDb;
+  try {
+    // Initialize SQLite database
+    sqliteDb = new sqlite3.Database("./invoices.db");
 
-  for (const invoice of invoices) {
-    const invoiceRef = invoicesRef.doc(invoice.invoiceId);
+    // Initialize Firestore batch
+    const firestoreDb = getFirestore(); // Make sure you have Firebase initialized
+    const batch = firestoreDb.batch();
+    const invoicesRef = firestoreDb.collection("invoices");
 
-    // Prepare main invoice data
-    const invoiceData = {
-      invoiceId: invoice.invoiceId,
-      date: invoice.date || "Unknown",
-      parcelsCount: parseInt(invoice.parcelsNumber) || 0,
-      totalAmount: parseFloat(invoice.total.replace(" DH", "")) || 0,
-      processedAt: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-      syncedToFirebase: true, // Mark as synced
-    };
+    for (const invoice of invoices) {
+      const invoiceRef = invoicesRef.doc(invoice.invoiceId);
 
-    // Add invoice to batch
-    batch.set(invoiceRef, cleanData(invoiceData), {
-      ignoreUndefinedProperties: true,
-    });
-
-    // Add parcels as subcollection
-    const parcelsRef = invoiceRef.collection("parcels");
-    for (const parcel of invoice.parcels) {
-      const parcelData = {
-        parcelNumber: parcel.parcelsNumber || "Unknown",
-        status: parcel.status || "Unknown",
-        city: parcel.city || "Unknown",
-        amount: parseFloat(parcel.total) || 0,
+      // Prepare main invoice data
+      const invoiceData = {
+        invoiceId: invoice.invoiceId,
+        date: invoice.date || "Unknown",
+        parcelsCount: parseInt(invoice.parcelsNumber) || 0,
+        totalAmount: parseFloat(invoice.total.replace(" DH", "")) || 0,
+        processedAt: new Date().toISOString(),
         lastUpdated: new Date().toISOString(),
+        syncedToFirebase: true,
       };
 
-      batch.set(parcelsRef.doc(parcel.parcelsNumber), cleanData(parcelData), {
+      batch.set(invoiceRef, cleanData(invoiceData), {
         ignoreUndefinedProperties: true,
       });
-    }
-  }
 
-  try {
+      // Add parcels as subcollection
+      const parcelsRef = invoiceRef.collection("parcels");
+      for (const parcel of invoice.parcels) {
+        const parcelData = {
+          parcelNumber: parcel.parcelsNumber || "Unknown",
+          status: parcel.status || "Unknown",
+          city: parcel.city || "Unknown",
+          amount: parseFloat(parcel.total) || 0,
+          lastUpdated: new Date().toISOString(),
+        };
+
+        batch.set(parcelsRef.doc(parcel.parcelsNumber), cleanData(parcelData), {
+          ignoreUndefinedProperties: true,
+        });
+      }
+    }
+
+    // Commit Firestore batch
     await batch.commit();
     console.log(
       `✅ Successfully saved ${invoices.length} invoices to Firestore`
     );
+
+    // Update SQLite sync status for successful uploads
+    await updateSqliteSyncStatus(sqliteDb, invoices);
+
     return true;
   } catch (error) {
-    console.error("❌ Error saving to Firestore:", error);
+    console.error("❌ Error in saveInvoicesToFirestore:", error);
     throw error;
+  } finally {
+    // Close SQLite connection
+    if (sqliteDb) {
+      sqliteDb.close();
+    }
   }
+}
+
+// Helper function to update SQLite sync status
+async function updateSqliteSyncStatus(db, invoices) {
+  return new Promise((resolve, reject) => {
+    db.serialize(() => {
+      db.run("BEGIN TRANSACTION");
+
+      try {
+        const stmt = db.prepare(
+          "UPDATE invoices SET is_synced = ? WHERE invoice_id = ?"
+        );
+
+        for (const invoice of invoices) {
+          stmt.run([true, invoice.invoiceId]);
+
+          // Update parcels if needed
+          if (invoice.parcels?.length) {
+            const parcelStmt = db.prepare(
+              "UPDATE parcels SET is_synced = ? WHERE invoice_id = ?"
+            );
+            parcelStmt.run([true, invoice.invoiceId]);
+            parcelStmt.finalize();
+          }
+        }
+
+        stmt.finalize();
+        db.run("COMMIT");
+        console.log(
+          `✅ Updated sync status for ${invoices.length} invoices in SQLite`
+        );
+        resolve();
+      } catch (error) {
+        db.run("ROLLBACK");
+        reject(error);
+      }
+    });
+  });
 }
 export async function getSyncedInvoiceIds() {
   // gets the orders that are in firestore
