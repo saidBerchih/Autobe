@@ -2,25 +2,33 @@ import sqlite3 from "sqlite3";
 import fs from "fs";
 import { getFirestore } from "firebase-admin/firestore";
 
-// Helper function to run SQLite queries with promises
-function runQuery(db, sql, params = []) {
+// Helper function to run SQLite queries with proper cleanup
+async function runQuery(db, sql, params = []) {
   return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) reject(err);
-      else resolve(this);
+    const stmt = db.prepare(sql, params, function (err) {
+      if (err) return reject(err);
+
+      stmt.run(params, function (runErr) {
+        if (runErr) {
+          stmt.finalize(); // Always finalize on error
+          return reject(runErr);
+        }
+
+        stmt.finalize(); // Finalize after successful run
+        resolve(this);
+      });
     });
   });
 }
 
-/**
- * Saves invoices to SQLite database
- * @param {Array} invoices - Array of invoice objects
- */
 export async function saveToSQLite(invoices) {
   const db = new sqlite3.Database("./invoices.db");
 
   try {
-    // Create tables if they don't exist
+    // Enable foreign key constraints
+    await runQuery(db, "PRAGMA foreign_keys = ON");
+
+    // Create tables with proper relationships
     await runQuery(
       db,
       `CREATE TABLE IF NOT EXISTS invoices (
@@ -50,43 +58,46 @@ export async function saveToSQLite(invoices) {
     // Begin transaction
     await runQuery(db, "BEGIN TRANSACTION");
 
-    for (const invoice of invoices) {
-      // Insert or ignore invoice
-      await runQuery(
-        db,
-        `INSERT OR IGNORE INTO invoices 
-        (invoice_id, date, parcels_count, total_amount)
-        VALUES (?, ?, ?, ?)`,
-        [
+    const invoiceStmt = db.prepare(
+      `INSERT OR IGNORE INTO invoices 
+      (invoice_id, date, parcels_count, total_amount)
+      VALUES (?, ?, ?, ?)`
+    );
+
+    const parcelStmt = db.prepare(
+      `INSERT OR IGNORE INTO parcels
+      (parcel_id, invoice_id, status, city, amount)
+      VALUES (?, ?, ?, ?, ?)`
+    );
+
+    try {
+      for (const invoice of invoices) {
+        await runQuery(invoiceStmt, [
           invoice.invoiceId,
           invoice.date,
           parseInt(invoice.parcelsNumber) || 0,
           parseFloat(invoice.total.replace("DH", "")) || 0,
-        ]
-      );
+        ]);
 
-      // Insert parcels if they exist
-      if (invoice.parcels?.length > 0) {
-        for (const parcel of invoice.parcels) {
-          await runQuery(
-            db,
-            `INSERT OR IGNORE INTO parcels
-            (parcel_id, invoice_id, status, city, amount)
-            VALUES (?, ?, ?, ?, ?)`,
-            [
+        if (invoice.parcels?.length > 0) {
+          for (const parcel of invoice.parcels) {
+            await runQuery(parcelStmt, [
               parcel.parcelsNumber,
               invoice.invoiceId,
               parcel.status,
               parcel.city,
               parseFloat(parcel.total) || 0,
-            ]
-          );
+            ]);
+          }
         }
       }
-    }
 
-    await runQuery(db, "COMMIT");
-    console.log(`✅ Saved ${invoices.length} invoices to SQLite`);
+      await runQuery(db, "COMMIT");
+      console.log(`✅ Saved ${invoices.length} invoices to SQLite`);
+    } finally {
+      invoiceStmt.finalize();
+      parcelStmt.finalize();
+    }
   } catch (error) {
     try {
       await runQuery(db, "ROLLBACK");
@@ -100,19 +111,18 @@ export async function saveToSQLite(invoices) {
   }
 }
 
-/**
- * Saves invoices to Firestore and updates SQLite sync status
- * @param {Array} invoices - Array of invoice objects
- */
 export async function saveInvoicesToFirestore(invoices) {
   let sqliteDb;
 
   try {
-    // Initialize SQLite database
+    // Initialize SQLite database with busy timeout
     sqliteDb = await new Promise((resolve, reject) => {
       const db = new sqlite3.Database("./invoices.db", (err) => {
-        if (err) reject(err);
-        else resolve(db);
+        if (err) return reject(err);
+
+        // Set busy timeout to handle concurrent access
+        db.configure("busyTimeout", 5000);
+        resolve(db);
       });
     });
 
@@ -136,20 +146,20 @@ export async function saveInvoicesToFirestore(invoices) {
 
       batch.set(invoiceRef, invoiceData, { ignoreUndefinedProperties: true });
 
-      // Add parcels subcollection if they exist
       if (invoice.parcels?.length) {
         const parcelsRef = invoiceRef.collection("parcels");
         for (const parcel of invoice.parcels) {
-          const parcelData = {
-            parcelNumber: parcel.parcelsNumber || "Unknown",
-            status: parcel.status || "Unknown",
-            city: parcel.city || "Unknown",
-            amount: parseFloat(parcel.total) || 0,
-            lastUpdated: new Date().toISOString(),
-          };
-          batch.set(parcelsRef.doc(parcel.parcelsNumber), parcelData, {
-            ignoreUndefinedProperties: true,
-          });
+          batch.set(
+            parcelsRef.doc(parcel.parcelsNumber),
+            {
+              parcelNumber: parcel.parcelsNumber || "Unknown",
+              status: parcel.status || "Unknown",
+              city: parcel.city || "Unknown",
+              amount: parseFloat(parcel.total) || 0,
+              lastUpdated: new Date().toISOString(),
+            },
+            { ignoreUndefinedProperties: true }
+          );
         }
       }
     }
@@ -169,27 +179,28 @@ export async function saveInvoicesToFirestore(invoices) {
     throw error;
   } finally {
     if (sqliteDb) {
-      sqliteDb.close();
+      try {
+        sqliteDb.close();
+      } catch (closeError) {
+        console.error("Error closing database:", closeError);
+      }
     }
   }
 }
 
-/**
- * Updates sync status in SQLite after successful Firestore upload
- */
 async function updateSyncStatus(db, invoices) {
+  let invoiceStmt, parcelStmt;
+
   try {
     await runQuery(db, "BEGIN TRANSACTION");
 
-    // Prepare statements for efficient updates
-    const invoiceStmt = db.prepare(
+    invoiceStmt = db.prepare(
       "UPDATE invoices SET synced_to_firebase = 1 WHERE invoice_id = ?"
     );
-    const parcelStmt = db.prepare(
+    parcelStmt = db.prepare(
       "UPDATE parcels SET synced_to_firebase = 1 WHERE invoice_id = ?"
     );
 
-    // Execute updates
     for (const invoice of invoices) {
       await runQuery(invoiceStmt, [invoice.invoiceId]);
 
@@ -207,13 +218,12 @@ async function updateSyncStatus(db, invoices) {
       console.error("Rollback failed:", rollbackError);
     }
     throw error;
+  } finally {
+    if (invoiceStmt) invoiceStmt.finalize();
+    if (parcelStmt) parcelStmt.finalize();
   }
 }
 
-/**
- * Gets IDs of invoices already synced to Firestore
- * @returns {Array} Array of synced invoice IDs
- */
 export async function getSyncedInvoiceIds() {
   if (!fs.existsSync("./invoices.db")) {
     return [];
@@ -237,6 +247,10 @@ export async function getSyncedInvoiceIds() {
     console.error("Error getting synced invoices:", error);
     return [];
   } finally {
-    db.close();
+    try {
+      db.close();
+    } catch (closeError) {
+      console.error("Error closing database:", closeError);
+    }
   }
 }
