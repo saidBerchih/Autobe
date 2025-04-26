@@ -2,7 +2,7 @@ import puppeteer from "puppeteer";
 import fs from "fs";
 import { cert, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { saveToSQLite } from "./database.js";
+import { getUnsyncedInvoiceIds, saveToSQLite } from "./database.js";
 const CONFIG = {
   BASE_URL: "https://clients.12livery.ma",
   LOGIN: {
@@ -278,23 +278,37 @@ async function getInvoices(page) {
       visible: true,
     });
     await page.select(CONFIG.INCOICES.SELECTORS.DROPDOWN, "100");
+    const unsyncedInvoiceIds = await getUnsyncedInvoiceIds();
 
-    const parcels = await page.$$eval(CONFIG.INCOICES.SELECTORS.ROWS, (rows) =>
-      rows.map((row) => {
-        const cells = row.querySelectorAll("td");
-        return {
-          invoiceId: cells[0]?.textContent.trim(),
-          date: cells[4]?.textContent.trim(),
-          status: cells[8]?.textContent.trim(),
-          parcelsNumber: cells[5]?.textContent.trim(),
-          total: cells[6]?.textContent.trim(),
-        };
-      })
+    if (unsyncedInvoiceIds.length === 0) {
+      console.log("No unsynced invoices found, you are all set :)");
+      return [];
+    }
+    const invoices = await page.$$eval(
+      CONFIG.INCOICES.SELECTORS.ROWS,
+      (rows, idsJSON) => {
+        const idSet = new Set(JSON.parse(idsJSON));
+        return rows
+          .map((row) => {
+            const cells = row.querySelectorAll("td");
+            const invoiceId = cells[0]?.textContent.trim();
+            return idSet.has(invoiceId)
+              ? {
+                  invoiceId,
+                  date: cells[4]?.textContent.trim(),
+                  status: cells[8]?.textContent.trim(),
+                  parcelsNumber: cells[5]?.textContent.trim(),
+                  total: cells[6]?.textContent.trim(),
+                }
+              : null;
+          })
+          .filter(Boolean);
+      },
+      JSON.stringify(unsyncedInvoiceIds)
     );
-    console.log("invoices :");
-    console.log(parcels);
+    console.log(`Found ${invoices.length} unsynced invoices to process`);
 
-    for (const note of parcels) {
+    for (const note of invoices) {
       try {
         console.log("note.invoiceId : ");
 

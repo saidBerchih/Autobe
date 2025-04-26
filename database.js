@@ -16,7 +16,8 @@ export async function saveToSQLite(invoices) {
         date TEXT NOT NULL,
         parcels_count INTEGER,
         total_amount REAL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        synced_to_firebase BOOLEAN DEFAULT FALSE
+        processedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `
     );
@@ -45,13 +46,14 @@ export async function saveToSQLite(invoices) {
         `
         INSERT OR REPLACE INTO invoices 
         (invoice_id, date, parcels_count, total_amount)
-        VALUES (?, ?, ?, ?)
+        VALUES (?, ?, ?, ?,?)
       `,
         [
           invoice.invoiceId,
           invoice.date,
           parseInt(invoice.parcelsNumber) || 0,
           parseFloat(invoice.total.replace("DH", "")) || 0,
+          false,
         ]
       );
 
@@ -86,7 +88,81 @@ export async function saveToSQLite(invoices) {
     db.close();
   }
 }
+async function saveInvoicesToFirestore(invoices) {
+  const batch = db.batch();
+  const invoicesRef = db.collection("invoices");
 
+  for (const invoice of invoices) {
+    const invoiceRef = invoicesRef.doc(invoice.invoiceId);
+
+    // Prepare main invoice data
+    const invoiceData = {
+      invoiceId: invoice.invoiceId,
+      date: invoice.date || "Unknown",
+      parcelsCount: parseInt(invoice.parcelsNumber) || 0,
+      totalAmount: parseFloat(invoice.total.replace(" DH", "")) || 0,
+      processedAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
+      syncedToFirebase: true, // Mark as synced
+    };
+
+    // Add invoice to batch
+    batch.set(invoiceRef, cleanData(invoiceData), {
+      ignoreUndefinedProperties: true,
+    });
+
+    // Add parcels as subcollection
+    const parcelsRef = invoiceRef.collection("parcels");
+    for (const parcel of invoice.parcels) {
+      const parcelData = {
+        parcelNumber: parcel.parcelsNumber || "Unknown",
+        status: parcel.status || "Unknown",
+        city: parcel.city || "Unknown",
+        amount: parseFloat(parcel.total) || 0,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      batch.set(parcelsRef.doc(parcel.parcelsNumber), cleanData(parcelData), {
+        ignoreUndefinedProperties: true,
+      });
+    }
+  }
+
+  try {
+    await batch.commit();
+    console.log(
+      `✅ Successfully saved ${invoices.length} invoices to Firestore`
+    );
+    return true;
+  } catch (error) {
+    console.error("❌ Error saving to Firestore:", error);
+    throw error;
+  }
+}
+export async function getUnsyncedInvoiceIds() {
+  const db = new sqlite3.Database("./invoices.db");
+
+  try {
+    const invoiceIds = await new Promise((resolve, reject) => {
+      db.all(
+        "SELECT invoice_id FROM invoices WHERE synced_to_firebase = 0",
+        (err, rows) => {
+          if (err) {
+            reject(err);
+          } else {
+            // Extract just the IDs from the rows
+            const ids = rows.map((row) => row.invoice_id);
+            resolve(ids);
+          }
+        }
+      );
+    });
+
+    return invoiceIds || []; // Always return an array (empty if no results)
+  } finally {
+    db.close();
+  }
+}
 // Helper function to run queries with promises
 function runQuery(db, sql, params = []) {
   return new Promise((resolve, reject) => {
@@ -95,38 +171,4 @@ function runQuery(db, sql, params = []) {
       else resolve(this);
     });
   });
-}
-
-export async function getInvoiceWithParcels(invoiceId) {
-  const db = new sqlite3.Database("./invoices.db");
-
-  try {
-    const invoice = await new Promise((resolve, reject) => {
-      db.get(
-        "SELECT * FROM invoices WHERE invoice_id = ?",
-        [invoiceId],
-        (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
-        }
-      );
-    });
-
-    if (invoice) {
-      invoice.parcels = await new Promise((resolve, reject) => {
-        db.all(
-          "SELECT * FROM parcels WHERE invoice_id = ?",
-          [invoiceId],
-          (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows);
-          }
-        );
-      });
-    }
-
-    return invoice;
-  } finally {
-    db.close();
-  }
 }
