@@ -4,8 +4,13 @@ import { cert, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import {
   getSyncedInvoiceIds,
-  saveToSQLite,
+  saveInvoicesToSQLite,
   saveInvoicesToFirestore,
+} from "./database.js";
+import {
+  getSyncedReturnNoteIds,
+  saveReturnNotesToFirestore,
+  saveReturnNotesToSQLite,
 } from "./database.js";
 const CONFIG = {
   BASE_URL: "https://clients.12livery.ma",
@@ -136,36 +141,34 @@ async function getReturnNotes(page) {
     });
     await page.select(CONFIG.RETURN_NOTES.SELECTORS.DROPDOWN, "50");
 
-    const noteIds = await page.$$eval(
-      CONFIG.RETURN_NOTES.SELECTORS.ROWS,
-      (rows) => rows.map((row) => row.id).filter(Boolean)
-    );
+    async function getUnsyncedReturnNotes(page) {
+      try {
+        const syncedReturnNoteIds = await getSyncedReturnNoteIds();
 
-    // Get count from Firestore (1 read operation)
-    const firestoreCount = await db
-      .collection("returnNotes")
-      .count()
-      .get()
-      .then((snapshot) => snapshot.data().count);
+        const unsyncedNoteIds = await page.$$eval(
+          CONFIG.RETURN_NOTES.SELECTORS.ROWS,
+          (rows, syncedIdsJSON) => {
+            const syncedSet = new Set(JSON.parse(syncedIdsJSON));
+            return rows
+              .map((row) => row.id)
+              .filter(Boolean)
+              .filter((id) => !syncedSet.has(id));
+          },
+          JSON.stringify(syncedReturnNoteIds)
+        );
 
-    if (noteIds.length === firestoreCount) {
-      console.log("All notes already in Firestore - nothing to process");
-      return [];
+        console.log(`Processing ${unsyncedNoteIds.length} unsynced notes`);
+        return unsyncedNoteIds;
+      } catch (error) {
+        console.error("Error filtering unsynced notes:", error);
+        return [];
+      }
     }
-    const existingDocs = await db
-      .collection("returnNotes")
-      .select("__name__") // Only retrieve document IDs
-      .get()
-      .then((snapshot) => {
-        console.timeEnd("FirestoreQuery");
-        return snapshot.docs.map((doc) => doc.id);
-      });
 
-    // 3. Find difference using Set operations
-    const existingSet = new Set(existingDocs);
-    const notesToProcess = noteIds.filter((id) => !existingSet.has(id));
+    // Usage
+    const unsyncedReturnIds = await getUnsyncedReturnNotes(page);
 
-    for (const noteId of notesToProcess) {
+    for (const noteId of unsyncedReturnIds) {
       try {
         const noteDetails = await processReturnNote(page, noteId);
         results.push(noteDetails);
@@ -187,40 +190,7 @@ function cleanData(obj) {
     Object.entries(obj).filter(([_, v]) => v !== undefined)
   );
 }
-async function saveToFirestore(returnNotes) {
-  const batch = db.batch();
-  const notesRef = db.collection("returnNotes");
 
-  for (const note of returnNotes) {
-    const noteRef = notesRef.doc(note.returnNoteId);
-
-    // Filter out undefined values from note data
-    const noteData = {
-      url: note.url || null,
-      processedAt: new Date().toISOString(),
-      parcelCount: note.parcels?.length || 0,
-    };
-
-    batch.set(noteRef, cleanData(noteData));
-    const parcelsRef = noteRef.collection("parcels");
-    for (const parcel of note.parcels) {
-      // Ensure all required fields have values
-      const parcelData = {
-        date: parcel.date || "Unkown",
-        city: parcel.city || "Unknown",
-        status: parcel.status || "Unknown",
-        lastUpdated: new Date().toISOString(),
-      };
-
-      batch.set(parcelsRef.doc(parcel.parcelNumber), parcelData, {
-        ignoreUndefinedProperties: true,
-      });
-    }
-  }
-
-  await batch.commit();
-  console.log(`Saved ${returnNotes.length} notes to Firestore`);
-}
 //// invoices
 async function processInvoices(page, note) {
   try {
@@ -284,7 +254,6 @@ async function getInvoices(page) {
     await page.select(CONFIG.INCOICES.SELECTORS.DROPDOWN, "100");
 
     const syncedInvoiceIds = await getSyncedInvoiceIds();
-
     const unsyncedInvoices = await page.$$eval(
       CONFIG.INCOICES.SELECTORS.ROWS,
       (rows, idsJSON) => {
@@ -338,21 +307,12 @@ async function getInvoices(page) {
     const page = await browser.newPage();
     await login(page);
 
-    // const returnNotes = await getReturnNotes(page);
-
-    // Create screenshots directory if not exists
-    if (!fs.existsSync("screenshots")) {
-      fs.mkdirSync("screenshots");
-    }
-
-    // await saveToFirestore(returnNotes);
+    const returnNotes = await getReturnNotes(page);
+    await saveReturnNotesToFirestore(returnNotes);
+    await saveReturnNotesToSQLite(returnNotes);
 
     const invoices = await getInvoices(page);
-
-    // Save to SQLite first
-    await saveToSQLite(invoices);
-
-    // Then sync to Firestore
+    await saveInvoicesToSQLite(invoices);
     await saveInvoicesToFirestore(invoices);
 
     await page.screenshot({
