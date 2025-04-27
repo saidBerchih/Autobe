@@ -353,6 +353,14 @@ async function getSyncedIds(dbPath, tableName) {
 
   const db = new sqlite3.Database(dbPath);
   try {
+    const tableExists = await runQuery(
+      db,
+      `SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
+      [tableName]
+    );
+    if (tableExists.length === 0) {
+      return [];
+    }
     const rows = await runQuery(
       db,
       `SELECT ${
