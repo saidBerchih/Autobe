@@ -180,7 +180,6 @@ async function getReturnNotes(page) {
 
     return results;
   } catch (error) {
-    await page.screenshot({ path: "return-notes-error.png" });
     throw error;
   }
 }
@@ -232,9 +231,7 @@ async function processInvoices(page, note) {
     };
   } catch (error) {
     console.error(`Error processing note ${note.invoiceId}:`, error);
-    await page.screenshot({
-      path: `error-${note.invoiceId}-${Date.now()}.png`,
-    });
+
     throw error;
   }
 }
@@ -291,7 +288,6 @@ async function getInvoices(page) {
     return results;
   } catch (error) {
     console.error("Error in getReturnNotes:", error);
-    await page.screenshot({ path: "return-notes-error.png" });
     throw error;
   }
 }
@@ -315,12 +311,6 @@ async function getInvoices(page) {
     await saveInvoicesToSQLite(invoices);
     await saveInvoicesToFirestore(invoices);
 
-    await page.screenshot({
-      path: "screenshots/example.png",
-      fullPage: true,
-    });
-
-    console.log("Screenshot saved to screenshots/example.png");
     await browser.close();
   } catch (error) {
     console.error("Error:", error);
