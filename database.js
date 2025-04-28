@@ -109,42 +109,41 @@ export async function saveInvoicesToSQLite(invoices) {
   try {
     await runQuery(db, "BEGIN TRANSACTION");
 
-    const invoiceStmt = await db.prepare(
-      "INSERT OR REPLACE INTO invoices VALUES (?, ?, ?, ?, ?, ?)"
-    );
-    const parcelStmt = await db.prepare(
-      "INSERT OR REPLACE INTO parcels VALUES (?, ?, ?, ?, ?, ?)"
-    );
-
     for (const invoice of invoices) {
       const totalAmount =
         parseFloat(invoice.total.replace(/[^0-9.]/g, "")) || 0;
 
-      await invoiceStmt.run(
-        invoice.invoiceId,
-        invoice.date,
-        parseInt(invoice.parcelsNumber) || 0,
-        totalAmount,
-        0,
-        new Date().toISOString()
+      await runQuery(
+        db,
+        "INSERT OR REPLACE INTO invoices VALUES (?, ?, ?, ?, ?, ?)",
+        [
+          invoice.invoiceId,
+          invoice.date,
+          parseInt(invoice.parcelsNumber) || 0,
+          totalAmount,
+          0,
+          new Date().toISOString(),
+        ]
       );
 
       if (invoice.parcels?.length) {
         for (const parcel of invoice.parcels) {
-          await parcelStmt.run(
-            parcel.parcelsNumber,
-            invoice.invoiceId,
-            parcel.status || "Unknown",
-            parcel.city || "Unknown",
-            parseFloat(parcel.total) || 0,
-            0
+          await runQuery(
+            db,
+            "INSERT OR REPLACE INTO parcels VALUES (?, ?, ?, ?, ?, ?)",
+            [
+              parcel.parcelsNumber,
+              invoice.invoiceId,
+              parcel.status || "Unknown",
+              parcel.city || "Unknown",
+              parseFloat(parcel.total) || 0,
+              0,
+            ]
           );
         }
       }
     }
 
-    await invoiceStmt.finalize();
-    await parcelStmt.finalize();
     await runQuery(db, "COMMIT");
     console.log(`✅ Saved ${invoices.length} invoices to SQLite`);
   } catch (error) {
@@ -211,42 +210,41 @@ export async function saveReturnNotesToSQLite(returnNotes) {
   try {
     await runQuery(db, "BEGIN TRANSACTION");
 
-    const noteStmt = await db.prepare(
-      "INSERT OR REPLACE INTO return_notes VALUES (?, ?, ?, ?, ?, ?)"
-    );
-    const parcelStmt = await db.prepare(
-      "INSERT OR REPLACE INTO return_parcels VALUES (?, ?, ?, ?, ?, ?, ?)"
-    );
-
     for (const note of returnNotes) {
       const noteDate = extractDateFromNoteId(note.returnNoteId);
 
-      await noteStmt.run(
-        note.returnNoteId,
-        noteDate,
-        new Date().toISOString(),
-        note.parcels?.length || 0,
-        0,
-        new Date().toISOString()
+      await runQuery(
+        db,
+        "INSERT OR REPLACE INTO return_notes VALUES (?, ?, ?, ?, ?, ?)",
+        [
+          note.returnNoteId,
+          noteDate,
+          new Date().toISOString(),
+          note.parcels?.length || 0,
+          0,
+          new Date().toISOString(),
+        ]
       );
 
       if (note.parcels?.length) {
         for (const parcel of note.parcels) {
-          await parcelStmt.run(
-            parcel.parcelNumber,
-            note.returnNoteId,
-            parcel.date || "Unknown",
-            parcel.city || "Unknown",
-            parcel.status || "Unknown",
-            new Date().toISOString(),
-            0
+          await runQuery(
+            db,
+            "INSERT OR REPLACE INTO return_parcels VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+              parcel.parcelNumber,
+              note.returnNoteId,
+              parcel.date || "Unknown",
+              parcel.city || "Unknown",
+              parcel.status || "Unknown",
+              new Date().toISOString(),
+              0,
+            ]
           );
         }
       }
     }
 
-    await noteStmt.finalize();
-    await parcelStmt.finalize();
     await runQuery(db, "COMMIT");
     console.log(`✅ Saved ${returnNotes.length} return notes to SQLite`);
   } catch (error) {
@@ -314,29 +312,26 @@ async function updateSyncStatus(dbPath, mainTable, childTable, items) {
   try {
     await runQuery(db, "BEGIN TRANSACTION");
 
-    const updateMain = await db.prepare(
-      `UPDATE ${mainTable} SET synced_to_firebase = 1 WHERE ${
-        mainTable === "invoices" ? "invoice_id" : "return_note_id"
-      } = ?`
-    );
-
-    const updateChild = await db.prepare(
-      `UPDATE ${childTable} SET synced_to_firebase = 1 WHERE ${
-        mainTable === "invoices" ? "invoice_id" : "return_note_id"
-      } = ?`
-    );
-
     for (const item of items) {
-      await updateMain.run(
-        item[mainTable === "invoices" ? "invoiceId" : "returnNoteId"]
+      const id = item[mainTable === "invoices" ? "invoiceId" : "returnNoteId"];
+
+      await runQuery(
+        db,
+        `UPDATE ${mainTable} SET synced_to_firebase = 1 WHERE ${
+          mainTable === "invoices" ? "invoice_id" : "return_note_id"
+        } = ?`,
+        [id]
       );
-      await updateChild.run(
-        item[mainTable === "invoices" ? "invoiceId" : "returnNoteId"]
+
+      await runQuery(
+        db,
+        `UPDATE ${childTable} SET synced_to_firebase = 1 WHERE ${
+          mainTable === "invoices" ? "invoice_id" : "return_note_id"
+        } = ?`,
+        [id]
       );
     }
 
-    await updateMain.finalize();
-    await updateChild.finalize();
     await runQuery(db, "COMMIT");
     console.log(`✅ Updated sync status for ${items.length} ${mainTable}`);
   } catch (error) {
@@ -353,20 +348,33 @@ async function getSyncedIds(dbPath, tableName) {
 
   const db = new sqlite3.Database(dbPath);
   try {
-    const tableExists = await runQuery(
-      db,
-      `SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
-      [tableName]
-    );
-    if (tableExists.length === 0) {
+    const tableExists = await new Promise((resolve, reject) => {
+      db.get(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
+        [tableName],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        }
+      );
+    });
+
+    if (!tableExists) {
       return [];
     }
-    const rows = await runQuery(
-      db,
-      `SELECT ${
-        tableName === "invoices" ? "invoice_id" : "return_note_id"
-      } FROM ${tableName} WHERE synced_to_firebase = 1`
-    );
+
+    const rows = await new Promise((resolve, reject) => {
+      db.all(
+        `SELECT ${
+          tableName === "invoices" ? "invoice_id" : "return_note_id"
+        } FROM ${tableName} WHERE synced_to_firebase = 1`,
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        }
+      );
+    });
+
     return rows.map(
       (row) => row[tableName === "invoices" ? "invoice_id" : "return_note_id"]
     );
