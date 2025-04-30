@@ -212,7 +212,7 @@ export async function saveReturnNotesToSQLite(returnNotes) {
 
     for (const note of returnNotes) {
       const noteDate = extractDateFromNoteId(note.returnNoteId);
-
+      if (note.parcels?.length == 0) return;
       await runQuery(
         db,
         "INSERT OR REPLACE INTO return_notes VALUES (?, ?, ?, ?, ?, ?)",
@@ -256,10 +256,25 @@ export async function saveReturnNotesToSQLite(returnNotes) {
 }
 
 export async function saveReturnNotesToFirestore(returnNotes) {
+  if (!returnNotes?.length) {
+    console.log("No return notes provided.");
+    return true; // or false, depending on requirements
+  }
+
   try {
+    // Filter out notes without parcels (handles undefined, null, and empty arrays)
+    const notesWithParcels = returnNotes.filter(
+      (note) => Array.isArray(note.parcels) && note.parcels.length > 0
+    );
+
+    if (!notesWithParcels.length) {
+      console.log("No return notes with parcels found.");
+      return true; // or false if this should be treated as an error
+    }
+
     await executeFirestoreBatch(
       "returnNotes",
-      returnNotes,
+      notesWithParcels,
       async (batch, notesRef, note) => {
         const noteRef = notesRef.doc(note.returnNoteId);
         const noteDate = extractDateFromNoteId(note.returnNoteId);
@@ -269,26 +284,24 @@ export async function saveReturnNotesToFirestore(returnNotes) {
           {
             date: noteDate,
             processedAt: FieldValue.serverTimestamp(),
-            parcelCount: note.parcels?.length || 0,
+            parcelCount: note.parcels.length, // Guaranteed > 0
             lastUpdated: FieldValue.serverTimestamp(),
           },
           { ignoreUndefinedProperties: true }
         );
 
-        if (note.parcels?.length) {
-          const parcelsRef = noteRef.collection("parcels");
-          for (const parcel of note.parcels) {
-            batch.set(
-              parcelsRef.doc(parcel.parcelNumber),
-              {
-                date: parcel.date || "Unknown",
-                city: parcel.city || "Unknown",
-                status: parcel.status || "Unknown",
-                lastUpdated: FieldValue.serverTimestamp(),
-              },
-              { ignoreUndefinedProperties: true }
-            );
-          }
+        const parcelsRef = noteRef.collection("parcels");
+        for (const parcel of note.parcels) {
+          batch.set(
+            parcelsRef.doc(parcel.parcelNumber),
+            {
+              date: parcel.date || "Unknown",
+              city: parcel.city || "Unknown",
+              status: parcel.status || "Unknown",
+              lastUpdated: FieldValue.serverTimestamp(),
+            },
+            { ignoreUndefinedProperties: true }
+          );
         }
       }
     );
@@ -297,10 +310,12 @@ export async function saveReturnNotesToFirestore(returnNotes) {
       "./return_notes.db",
       "return_notes",
       "return_parcels",
-      returnNotes
+      notesWithParcels
     );
+
     return true;
   } catch (error) {
+    console.error("Firestore save failed:", error);
     throw new Error(`Firestore save failed: ${error.message}`);
   }
 }
