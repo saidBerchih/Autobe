@@ -219,7 +219,7 @@ export async function saveReturnNotesToSQLite(returnNotes) {
       if (note.parcels?.length == 0) return;
       await runQuery(
         db,
-        "INSERT OR REPLACE INTO return_notes VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT OR REPLACE INTO return_notes VALUES (?, ?, ?, ?, ?, ?,?)",
         [
           note.returnNoteId,
           noteDate,
