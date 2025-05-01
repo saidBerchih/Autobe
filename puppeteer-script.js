@@ -157,7 +157,9 @@ async function getReturnNotes(page) {
           JSON.stringify(syncedReturnNoteIds)
         );
 
-        console.log(`Processing ${unsyncedNoteIds.length} unsynced notes`);
+        console.log(
+          `Processing ${unsyncedNoteIds.length} unsynced notes , synced notes : ${syncedReturnNoteIds}`
+        );
         return unsyncedNoteIds;
       } catch (error) {
         console.error("Error filtering unsynced notes:", error);
