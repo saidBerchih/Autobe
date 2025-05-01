@@ -93,9 +93,11 @@ async function processReturnNote(page, noteId) {
         timeout: 15000,
       }
     );
+
     await page.waitForSelector(CONFIG.RETURN_NOTES.SELECTORS.DROPDOWN, {
       visible: true,
     });
+
     await page.select(CONFIG.RETURN_NOTES.SELECTORS.DROPDOWN, "50");
 
     const parcels = await page.$$eval(
@@ -115,7 +117,7 @@ async function processReturnNote(page, noteId) {
     return {
       returnNoteId: noteId,
       url: noteUrl,
-      parcels: parcels,
+      parcels: parcels[0]?.parcelNumber?.length == 0 ? 0 : parcels,
       processedAt: new Date().toISOString(),
       metrics: {
         parcelCount: parcels.length,

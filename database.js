@@ -216,7 +216,7 @@ export async function saveReturnNotesToSQLite(returnNotes) {
 
     for (const note of returnNotes) {
       const noteDate = extractDateFromNoteId(note.returnNoteId);
-      if (note.parcels?.length == 0) return;
+      if (note.parcels == 0) return;
       await runQuery(
         db,
         "INSERT OR REPLACE INTO return_notes VALUES (?, ?, ?, ?, ?, ?,?)",
@@ -269,7 +269,7 @@ export async function saveReturnNotesToFirestore(returnNotes) {
   try {
     // Filter out notes without parcels (handles undefined, null, and empty arrays)
     const notesWithParcels = returnNotes.filter(
-      (note) => Array.isArray(note.parcels) && note.parcels.length > 1
+      (note) => Array.isArray(note.parcels) && note.parcels > 0
     );
 
     if (!notesWithParcels.length) {
