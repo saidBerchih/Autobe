@@ -358,18 +358,21 @@ async function updateSyncStatus(dbPath, mainTable, childTable, items) {
 }
 
 // Common Sync Status Check
+
 async function getSyncedIds(dbPath, tableName) {
   if (!fs.existsSync(dbPath)) return [];
 
   const db = new sqlite3.Database(dbPath);
+
   try {
+    // First check if table exists
     const tableExists = await new Promise((resolve, reject) => {
       db.get(
         `SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
         [tableName],
         (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
+          if (err) return reject(err);
+          resolve(!!row);
         }
       );
     });
@@ -378,26 +381,35 @@ async function getSyncedIds(dbPath, tableName) {
       return [];
     }
 
+    // Then get the synced IDs
+    const columnName =
+      tableName === "invoices" ? "invoice_id" : "return_note_id";
     const rows = await new Promise((resolve, reject) => {
       db.all(
-        `SELECT ${
-          tableName === "invoices" ? "invoice_id" : "return_note_id"
-        } FROM ${tableName} WHERE synced_to_firebase = 1`,
+        `SELECT ${columnName} FROM ${tableName} WHERE synced_to_firebase = 1`,
         (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
+          if (err) return reject(err);
+          resolve(rows);
         }
       );
     });
 
-    return rows.map(
-      (row) => row[tableName === "invoices" ? "invoice_id" : "return_note_id"]
-    );
+    return rows.map((row) => row[columnName]);
   } catch (error) {
     console.error(`Error getting synced ${tableName}:`, error);
     return [];
   } finally {
-    db.close();
+    // Close the database connection
+    await new Promise((resolve, reject) => {
+      db.close((err) => {
+        if (err) {
+          console.error(`Error closing database ${dbPath}:`, err);
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
   }
 }
 
