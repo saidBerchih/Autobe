@@ -44,51 +44,6 @@ async function executeFirestoreBatch(collectionName, items, processItem) {
   );
 }
 
-// Invoices Schema
-const INVOICES_SCHEMA = [
-  `CREATE TABLE IF NOT EXISTS invoices (
-    invoice_id TEXT PRIMARY KEY,
-    date TEXT NOT NULL,
-    parcels_count INTEGER,
-    total_amount REAL,
-    synced_to_firebase BOOLEAN DEFAULT FALSE,
-    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )`,
-  `CREATE TABLE IF NOT EXISTS parcels (
-    parcel_id TEXT,
-    invoice_id TEXT NOT NULL,
-    status TEXT,
-    city TEXT,
-    amount REAL,
-    synced_to_firebase BOOLEAN DEFAULT FALSE,
-    PRIMARY KEY (parcel_id, invoice_id),
-    FOREIGN KEY (invoice_id) REFERENCES invoices (invoice_id) ON DELETE CASCADE
-  )`,
-];
-
-// Return Notes Schema
-const RETURN_NOTES_SCHEMA = [
-  `CREATE TABLE IF NOT EXISTS return_notes (
-    return_note_id TEXT PRIMARY KEY,
-    note_date TEXT NOT NULL,
-    processed_at TEXT NOT NULL,
-    parcel_count INTEGER,
-    synced_to_firebase BOOLEAN DEFAULT FALSE,
-    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )`,
-  `CREATE TABLE IF NOT EXISTS return_parcels (
-    parcel_number TEXT,
-    return_note_id TEXT NOT NULL,
-    date TEXT,
-    city TEXT,
-    status TEXT,
-    last_updated TEXT,
-    synced_to_firebase BOOLEAN DEFAULT FALSE,
-    PRIMARY KEY (parcel_number, return_note_id),
-    FOREIGN KEY (return_note_id) REFERENCES return_notes (return_note_id) ON DELETE CASCADE
-  )`,
-];
-
 // Date extraction logic
 function extractDateFromNoteId(noteId) {
   const datePart = noteId.split("-")[1]?.substring(0, 6) || "000000";
@@ -104,7 +59,27 @@ function extractDateFromNoteId(noteId) {
 
 // Invoices Operations
 export async function saveInvoicesToSQLite(invoices) {
-  const db = await initializeDatabase("./invoices.db", INVOICES_SCHEMA);
+  const db = await initializeDatabase("./invoices.db", [
+    `CREATE TABLE IF NOT EXISTS invoices (
+      invoice_id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      parcels_count INTEGER,
+      total_amount REAL,
+      synced_to_firebase BOOLEAN DEFAULT FALSE,
+      processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      validated BOOLEAN DEFAULT FALSE
+    )`,
+    `CREATE TABLE IF NOT EXISTS parcels (
+      parcel_id TEXT,
+      invoice_id TEXT NOT NULL,
+      status TEXT,
+      city TEXT,
+      amount REAL,
+      synced_to_firebase BOOLEAN DEFAULT FALSE,
+      PRIMARY KEY (parcel_id, invoice_id),
+      FOREIGN KEY (invoice_id) REFERENCES invoices (invoice_id) ON DELETE CASCADE
+    )`,
+  ]);
 
   try {
     await runQuery(db, "BEGIN TRANSACTION");
@@ -115,7 +90,9 @@ export async function saveInvoicesToSQLite(invoices) {
 
       await runQuery(
         db,
-        "INSERT OR REPLACE INTO invoices VALUES (?, ?, ?, ?, ?, ?)",
+        `INSERT OR REPLACE INTO invoices (
+          invoice_id, date, parcels_count, total_amount, synced_to_firebase, processed_at
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
         [
           invoice.invoiceId,
           invoice.date,
@@ -130,7 +107,9 @@ export async function saveInvoicesToSQLite(invoices) {
         for (const parcel of invoice.parcels) {
           await runQuery(
             db,
-            "INSERT OR REPLACE INTO parcels VALUES (?, ?, ?, ?, ?, ?)",
+            `INSERT OR REPLACE INTO parcels (
+              parcel_id, invoice_id, status, city, amount, synced_to_firebase
+            ) VALUES (?, ?, ?, ?, ?, ?)`,
             [
               parcel.parcelsNumber,
               invoice.invoiceId,
@@ -196,26 +175,122 @@ export async function saveInvoicesToFirestore(invoices) {
       }
     );
 
-    await updateSyncStatus("./invoices.db", "invoices", "parcels", invoices);
+    await updateInvoiceSyncStatus(invoices);
     return true;
   } catch (error) {
     throw new Error(`Firestore save failed: ${error.message}`);
   }
 }
 
+async function updateInvoiceSyncStatus(invoices) {
+  const db = new sqlite3.Database("./invoices.db");
+
+  try {
+    await runQuery(db, "BEGIN TRANSACTION");
+
+    for (const invoice of invoices) {
+      await runQuery(
+        db,
+        `UPDATE invoices SET synced_to_firebase = 1 WHERE invoice_id = ?`,
+        [invoice.invoiceId]
+      );
+
+      await runQuery(
+        db,
+        `UPDATE parcels SET synced_to_firebase = 1 WHERE invoice_id = ?`,
+        [invoice.invoiceId]
+      );
+    }
+
+    await runQuery(db, "COMMIT");
+    console.log(`✅ Updated sync status for ${invoices.length} invoices`);
+  } catch (error) {
+    await runQuery(db, "ROLLBACK");
+    throw error;
+  } finally {
+    db.close();
+  }
+}
+
+export async function getSyncedInvoiceIds() {
+  const dbPath = "./invoices.db";
+  if (!fs.existsSync(dbPath)) return [];
+
+  const db = new sqlite3.Database(dbPath);
+
+  try {
+    // Check if table exists
+    const tableExists = await new Promise((resolve, reject) => {
+      db.get(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name='invoices'`,
+        (err, row) => {
+          if (err) return reject(err);
+          resolve(!!row);
+        }
+      );
+    });
+
+    if (!tableExists) {
+      return [];
+    }
+
+    // Get synced invoice IDs
+    const rows = await new Promise((resolve, reject) => {
+      db.all(
+        `SELECT invoice_id FROM invoices WHERE synced_to_firebase = 1`,
+        (err, rows) => {
+          if (err) return reject(err);
+          resolve(rows);
+        }
+      );
+    });
+
+    return rows.map((row) => row.invoice_id);
+  } catch (error) {
+    console.error("Error getting synced invoice IDs:", error);
+    return [];
+  } finally {
+    db.close();
+  }
+}
+
 // Return Notes Operations
 export async function saveReturnNotesToSQLite(returnNotes) {
-  const db = await initializeDatabase("./return_notes.db", RETURN_NOTES_SCHEMA);
+  const db = await initializeDatabase("./return_notes.db", [
+    `CREATE TABLE IF NOT EXISTS return_notes (
+      return_note_id TEXT PRIMARY KEY,
+      note_date TEXT NOT NULL,
+      processed_at TEXT NOT NULL,
+      parcel_count INTEGER,
+      synced_to_firebase BOOLEAN DEFAULT FALSE,
+      validated BOOLEAN DEFAULT FALSE,
+      last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS return_parcels (
+      parcel_number TEXT,
+      return_note_id TEXT NOT NULL,
+      date TEXT,
+      city TEXT,
+      status TEXT,
+      last_updated TEXT,
+      synced_to_firebase BOOLEAN DEFAULT FALSE,
+      PRIMARY KEY (parcel_number, return_note_id),
+      FOREIGN KEY (return_note_id) REFERENCES return_notes (return_note_id) ON DELETE CASCADE
+    )`,
+  ]);
 
   try {
     await runQuery(db, "BEGIN TRANSACTION");
 
     for (const note of returnNotes) {
       const noteDate = extractDateFromNoteId(note.returnNoteId);
-      if (note.parcels?.length == 0) return;
+      if (note.parcels?.length == 0) continue;
+
       await runQuery(
         db,
-        "INSERT OR REPLACE INTO return_notes VALUES (?, ?, ?, ?, ?, ?)",
+        `INSERT OR REPLACE INTO return_notes (
+          return_note_id, note_date, processed_at, parcel_count, synced_to_firebase, last_updated
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
         [
           note.returnNoteId,
           noteDate,
@@ -230,7 +305,9 @@ export async function saveReturnNotesToSQLite(returnNotes) {
         for (const parcel of note.parcels) {
           await runQuery(
             db,
-            "INSERT OR REPLACE INTO return_parcels VALUES (?, ?, ?, ?, ?, ?, ?)",
+            `INSERT OR REPLACE INTO return_parcels (
+              parcel_number, return_note_id, date, city, status, last_updated, synced_to_firebase
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [
               parcel.parcelNumber,
               note.returnNoteId,
@@ -258,18 +335,18 @@ export async function saveReturnNotesToSQLite(returnNotes) {
 export async function saveReturnNotesToFirestore(returnNotes) {
   if (!returnNotes?.length) {
     console.log("No return notes provided.");
-    return true; // or false, depending on requirements
+    return true;
   }
 
   try {
-    // Filter out notes without parcels (handles undefined, null, and empty arrays)
+    // Filter out notes without parcels
     const notesWithParcels = returnNotes.filter(
       (note) => Array.isArray(note.parcels) && note.parcels.length > 0
     );
 
     if (!notesWithParcels.length) {
       console.log("No return notes with parcels found.");
-      return true; // or false if this should be treated as an error
+      return true;
     }
 
     await executeFirestoreBatch(
@@ -284,7 +361,7 @@ export async function saveReturnNotesToFirestore(returnNotes) {
           {
             date: noteDate,
             processedAt: FieldValue.serverTimestamp(),
-            parcelCount: note.parcels.length, // Guaranteed > 0
+            parcelCount: note.parcels.length,
             lastUpdated: FieldValue.serverTimestamp(),
           },
           { ignoreUndefinedProperties: true }
@@ -306,13 +383,7 @@ export async function saveReturnNotesToFirestore(returnNotes) {
       }
     );
 
-    await updateSyncStatus(
-      "./return_notes.db",
-      "return_notes",
-      "return_parcels",
-      notesWithParcels
-    );
-
+    await updateReturnNoteSyncStatus(notesWithParcels);
     return true;
   } catch (error) {
     console.error("Firestore save failed:", error);
@@ -320,35 +391,30 @@ export async function saveReturnNotesToFirestore(returnNotes) {
   }
 }
 
-// Common Sync Status Management
-async function updateSyncStatus(dbPath, mainTable, childTable, items) {
-  const db = new sqlite3.Database(dbPath);
+async function updateReturnNoteSyncStatus(returnNotes) {
+  const db = new sqlite3.Database("./return_notes.db");
 
   try {
     await runQuery(db, "BEGIN TRANSACTION");
 
-    for (const item of items) {
-      const id = item[mainTable === "invoices" ? "invoiceId" : "returnNoteId"];
-
+    for (const note of returnNotes) {
       await runQuery(
         db,
-        `UPDATE ${mainTable} SET synced_to_firebase = 1 WHERE ${
-          mainTable === "invoices" ? "invoice_id" : "return_note_id"
-        } = ?`,
-        [id]
+        `UPDATE return_notes SET synced_to_firebase = 1 WHERE return_note_id = ?`,
+        [note.returnNoteId]
       );
 
       await runQuery(
         db,
-        `UPDATE ${childTable} SET synced_to_firebase = 1 WHERE ${
-          mainTable === "invoices" ? "invoice_id" : "return_note_id"
-        } = ?`,
-        [id]
+        `UPDATE return_parcels SET synced_to_firebase = 1 WHERE return_note_id = ?`,
+        [note.returnNoteId]
       );
     }
 
     await runQuery(db, "COMMIT");
-    console.log(`✅ Updated sync status for ${items.length} ${mainTable}`);
+    console.log(
+      `✅ Updated sync status for ${returnNotes.length} return notes`
+    );
   } catch (error) {
     await runQuery(db, "ROLLBACK");
     throw error;
@@ -357,19 +423,17 @@ async function updateSyncStatus(dbPath, mainTable, childTable, items) {
   }
 }
 
-// Common Sync Status Check
-
-async function getSyncedIds(dbPath, tableName) {
+export async function getSyncedReturnNoteIds() {
+  const dbPath = "./return_notes.db";
   if (!fs.existsSync(dbPath)) return [];
 
   const db = new sqlite3.Database(dbPath);
 
   try {
-    // First check if table exists
+    // Check if table exists
     const tableExists = await new Promise((resolve, reject) => {
       db.get(
-        `SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
-        [tableName],
+        `SELECT name FROM sqlite_master WHERE type='table' AND name='return_notes'`,
         (err, row) => {
           if (err) return reject(err);
           resolve(!!row);
@@ -381,12 +445,10 @@ async function getSyncedIds(dbPath, tableName) {
       return [];
     }
 
-    // Then get the synced IDs
-    const columnName =
-      tableName === "invoices" ? "invoice_id" : "return_note_id";
+    // Get synced return note IDs
     const rows = await new Promise((resolve, reject) => {
       db.all(
-        `SELECT ${columnName} FROM ${tableName} WHERE synced_to_firebase = 1`,
+        `SELECT return_note_id FROM return_notes WHERE synced_to_firebase = 1`,
         (err, rows) => {
           if (err) return reject(err);
           resolve(rows);
@@ -394,26 +456,11 @@ async function getSyncedIds(dbPath, tableName) {
       );
     });
 
-    return rows.map((row) => row[columnName]);
+    return rows.map((row) => row.return_note_id);
   } catch (error) {
-    console.error(`Error getting synced ${tableName}:`, error);
+    console.error("Error getting synced return note IDs:", error);
     return [];
   } finally {
-    // Close the database connection
-    await new Promise((resolve, reject) => {
-      db.close((err) => {
-        if (err) {
-          console.error(`Error closing database ${dbPath}:`, err);
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
+    db.close();
   }
 }
-
-export const getSyncedInvoiceIds = () =>
-  getSyncedIds("./invoices.db", "invoices");
-export const getSyncedReturnNoteIds = () =>
-  getSyncedIds("./return_notes.db", "return_notes");
