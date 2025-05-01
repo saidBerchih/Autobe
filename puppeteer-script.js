@@ -141,6 +141,12 @@ async function getReturnNotes(page) {
     });
     await page.select(CONFIG.RETURN_NOTES.SELECTORS.DROPDOWN, "50");
     console.log("drop down ");
+    const noteIds = await page.$$eval(
+      CONFIG.RETURN_NOTES.SELECTORS.ROWS,
+      (rows) => rows.map((row) => row.id).filter(Boolean)
+    );
+    console.log("notes");
+    console.log(noteIds);
 
     async function getUnsyncedReturnNotes(page) {
       try {
@@ -171,6 +177,7 @@ async function getReturnNotes(page) {
 
     // Usage
     const unsyncedReturnIds = await getUnsyncedReturnNotes(page);
+    console.log(`unsyncedReturnIds : ${unsyncedReturnIds}`);
 
     for (const noteId of unsyncedReturnIds) {
       try {
