@@ -5,11 +5,11 @@ import { getFirestore } from "firebase-admin/firestore";
 import {
   getSyncedInvoiceIds,
   saveInvoicesToSQLite,
-  saveInvoicesToFirestore,
+  // saveInvoicesToFirestore,
 } from "./database.js";
 import {
   getSyncedReturnNoteIds,
-  saveReturnNotesToFirestore,
+  // saveReturnNotesToFirestore,
   saveReturnNotesToSQLite,
 } from "./database.js";
 const CONFIG = {
@@ -310,12 +310,12 @@ async function getInvoices(page) {
     await login(page);
 
     const returnNotes = await getReturnNotes(page);
-    await saveReturnNotesToFirestore(returnNotes);
+    // await saveReturnNotesToFirestore(returnNotes);
     await saveReturnNotesToSQLite(returnNotes);
 
     const invoices = await getInvoices(page);
     await saveInvoicesToSQLite(invoices);
-    await saveInvoicesToFirestore(invoices);
+    // await saveInvoicesToFirestore(invoices);
 
     await browser.close();
   } catch (error) {
