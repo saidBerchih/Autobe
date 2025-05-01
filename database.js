@@ -269,7 +269,7 @@ export async function saveReturnNotesToFirestore(returnNotes) {
   try {
     // Filter out notes without parcels (handles undefined, null, and empty arrays)
     const notesWithParcels = returnNotes.filter(
-      (note) => Array.isArray(note.parcels) && note.parcels.length > 0
+      (note) => Array.isArray(note.parcels) && note.parcels.length > 1
     );
 
     if (!notesWithParcels.length) {
