@@ -255,7 +255,7 @@ async function getInvoices(page) {
     await page.select(CONFIG.INCOICES.SELECTORS.DROPDOWN, "100");
 
     const syncedInvoiceIds = await getSyncedInvoiceIds();
-    console.log(`synced invoices : ${syncedInvoiceIds.lenght}`);
+    console.log(`synced invoices : ${syncedInvoiceIds.length}`);
 
     const unsyncedInvoices = await page.$$eval(
       CONFIG.INCOICES.SELECTORS.ROWS,

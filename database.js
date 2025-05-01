@@ -117,7 +117,7 @@ export async function saveInvoicesToSQLite(invoices) {
 
       await runQuery(
         db,
-        "INSERT OR REPLACE INTO invoices VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT OR REPLACE INTO invoices VALUES (?, ?, ?, ?, ?, ? ,?)",
         [
           invoice.invoiceId,
           invoice.date,
@@ -125,6 +125,7 @@ export async function saveInvoicesToSQLite(invoices) {
           totalAmount,
           0,
           new Date().toISOString(),
+          0,
         ]
       );
 
@@ -175,6 +176,7 @@ export async function saveInvoicesToFirestore(invoices) {
             totalAmount,
             processedAt: FieldValue.serverTimestamp(),
             lastUpdated: FieldValue.serverTimestamp(),
+            validated: false,
           },
           { ignoreUndefinedProperties: true }
         );
@@ -223,6 +225,7 @@ export async function saveReturnNotesToSQLite(returnNotes) {
           noteDate,
           new Date().toISOString(),
           note.parcels?.length || 0,
+          0,
           0,
           new Date().toISOString(),
         ]
@@ -288,6 +291,7 @@ export async function saveReturnNotesToFirestore(returnNotes) {
             processedAt: FieldValue.serverTimestamp(),
             parcelCount: note.parcels.length, // Guaranteed > 0
             lastUpdated: FieldValue.serverTimestamp(),
+            validated: false,
           },
           { ignoreUndefinedProperties: true }
         );
