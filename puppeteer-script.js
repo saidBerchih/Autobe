@@ -25,7 +25,7 @@ const CONFIG = {
   RETURN_NOTES: {
     URL: "/return-note",
     SELECTORS: {
-      ROWS: ".row > table-responsive > table > tbody > tr",
+      ROWS: " table > tbody > tr",
       DROPDOWN: "select.custom-select",
       DETAILS_PAGE_INDICATOR: "#rn_added_parcels_table",
       TABLE_LOADED: "table.dataTable",
