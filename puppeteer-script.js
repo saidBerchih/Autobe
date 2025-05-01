@@ -158,7 +158,7 @@ async function getReturnNotes(page) {
         );
 
         console.log(
-          `Processing ${unsyncedNoteIds.length} unsynced notes , synced notes : ${syncedReturnNoteIds}`
+          `Processing ${unsyncedNoteIds.length} unsynced notes , synced notes : ${syncedReturnNoteIds.lenght}`
         );
         return unsyncedNoteIds;
       } catch (error) {
