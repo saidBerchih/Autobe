@@ -140,10 +140,12 @@ async function getReturnNotes(page) {
       visible: true,
     });
     await page.select(CONFIG.RETURN_NOTES.SELECTORS.DROPDOWN, "50");
+    console.log("drop down ");
 
     async function getUnsyncedReturnNotes(page) {
       try {
         const syncedReturnNoteIds = await getSyncedReturnNoteIds();
+        console.log(`synced ids : ${syncedReturnNoteIds.lenght}`);
 
         const unsyncedNoteIds = await page.$$eval(
           CONFIG.RETURN_NOTES.SELECTORS.ROWS,
