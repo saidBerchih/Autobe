@@ -5,7 +5,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import {
   getSyncedInvoiceIds,
   saveInvoicesToSQLite,
-  // saveInvoicesToFirestore,
+  saveInvoicesToFirestore,
 } from "./database.js";
 import {
   getSyncedReturnNoteIds,
@@ -322,7 +322,7 @@ async function getInvoices(page) {
 
     const invoices = await getInvoices(page);
     await saveInvoicesToSQLite(invoices);
-    // await saveInvoicesToFirestore(invoices);
+    await saveInvoicesToFirestore(invoices);
 
     await browser.close();
   } catch (error) {
