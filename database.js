@@ -263,18 +263,17 @@ export async function saveReturnNotesToSQLite(returnNotes) {
 export async function saveReturnNotesToFirestore(returnNotes) {
   if (!returnNotes?.length) {
     console.log("No return notes provided.");
-    return true; // or false, depending on requirements
+    return true;
   }
-
   try {
-    // Filter out notes without parcels (handles undefined, null, and empty arrays)
+    // Filter out notes without parcels
     const notesWithParcels = returnNotes.filter(
-      (note) => Array.isArray(note.parcels) && note.parcels > 0
+      (note) => Array.isArray(note.parcels) && note.parcels != 0
     );
 
     if (!notesWithParcels.length) {
       console.log("No return notes with parcels found.");
-      return true; // or false if this should be treated as an error
+      return true;
     }
 
     await executeFirestoreBatch(
@@ -289,7 +288,7 @@ export async function saveReturnNotesToFirestore(returnNotes) {
           {
             date: noteDate,
             processedAt: FieldValue.serverTimestamp(),
-            parcelCount: note.parcels.length, // Guaranteed > 0
+            parcelCount: note.parcels.length,
             lastUpdated: FieldValue.serverTimestamp(),
             validated: false,
           },
@@ -312,11 +311,12 @@ export async function saveReturnNotesToFirestore(returnNotes) {
       }
     );
 
+    // Pass the filtered array to updateSyncStatus
     await updateSyncStatus(
       "./return_notes.db",
       "return_notes",
       "return_parcels",
-      notesWithParcels
+      notesWithParcels // This was the key change needed
     );
 
     return true;
@@ -325,7 +325,6 @@ export async function saveReturnNotesToFirestore(returnNotes) {
     throw new Error(`Firestore save failed: ${error.message}`);
   }
 }
-
 // Common Sync Status Management
 async function updateSyncStatus(dbPath, mainTable, childTable, items) {
   const db = new sqlite3.Database(dbPath);
