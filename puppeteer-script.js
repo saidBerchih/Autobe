@@ -321,10 +321,12 @@ async function getInvoices(page) {
     await login(page);
 
     const returnNotes = await getReturnNotes(page);
-    await saveReturnNotesToFirestore(returnNotes);
-    await saveReturnNotesToSQLite(returnNotes);
+
+    await saveReturnNotesToSQLite(returnNotes); // save to sqlie
+    await saveReturnNotesToFirestore(returnNotes); // save to firestore
 
     const invoices = await getInvoices(page);
+
     await saveInvoicesToSQLite(invoices);
     await saveInvoicesToFirestore(invoices);
 
