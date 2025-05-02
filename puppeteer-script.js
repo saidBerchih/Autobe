@@ -143,13 +143,24 @@ async function getReturnNotes(page) {
     });
     await page.select(CONFIG.RETURN_NOTES.SELECTORS.DROPDOWN, "50");
 
-    console.log("drop down ");
     const noteIds = await page.$$eval(
       CONFIG.RETURN_NOTES.SELECTORS.ROWS,
-      (rows) => rows.map((row) => row.id).filter(Boolean)
+      (rows) => {
+        return rows
+          .filter((row) => {
+            // Get the 5th td element (index 4) which contains the parcel count
+            const parcelCountCell = row.cells[4];
+            const parcelCount = parseInt(parcelCountCell.textContent.trim());
+            return parcelCount > 0;
+          })
+          .map((row) => row.id)
+          .filter(Boolean);
+      }
     );
+
     console.log("notes");
     console.log(noteIds);
+    console.log(noteIds.length);
 
     async function getUnsyncedReturnNotes(page) {
       try {
@@ -183,15 +194,15 @@ async function getReturnNotes(page) {
     const unsyncedReturnIds = await getUnsyncedReturnNotes(page);
     console.log(`unsyncedReturnIds : ${unsyncedReturnIds}`);
 
-    for (const noteId of unsyncedReturnIds) {
-      try {
-        const noteDetails = await processReturnNote(page, noteId);
-        results.push(noteDetails);
-      } catch (error) {
-        console.error(`Error processing return note ${noteId}:`, error);
-        continue;
-      }
-    }
+    // for (const noteId of unsyncedReturnIds) {
+    //   try {
+    //     const noteDetails = await processReturnNote(page, noteId);
+    //     results.push(noteDetails);
+    //   } catch (error) {
+    //     console.error(`Error processing return note ${noteId}:`, error);
+    //     continue;
+    //   }
+    // }
 
     return results;
   } catch (error) {
@@ -321,8 +332,8 @@ async function getInvoices(page) {
     await login(page);
 
     const returnNotes = await getReturnNotes(page);
-    await saveReturnNotesToFirestore(returnNotes);
-    await saveReturnNotesToSQLite(returnNotes);
+    // await saveReturnNotesToFirestore(returnNotes);
+    // await saveReturnNotesToSQLite(returnNotes);
 
     const invoices = await getInvoices(page);
     await saveInvoicesToSQLite(invoices);
