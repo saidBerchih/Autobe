@@ -143,24 +143,24 @@ async function getReturnNotes(page) {
     });
     await page.select(CONFIG.RETURN_NOTES.SELECTORS.DROPDOWN, "50");
 
-    const noteIds = await page.$$eval(
-      CONFIG.RETURN_NOTES.SELECTORS.ROWS,
-      (rows) => {
-        return rows
-          .filter((row) => {
-            // Get the 5th td element (index 4) which contains the parcel count
-            const parcelCountCell = row.cells[4];
-            const parcelCount = parseInt(parcelCountCell.textContent.trim());
-            return parcelCount > 0;
-          })
-          .map((row) => row.id)
-          .filter(Boolean);
-      }
-    );
+    // const noteIds = await page.$$eval(
+    //   CONFIG.RETURN_NOTES.SELECTORS.ROWS,
+    //   (rows) => {
+    //     return rows
+    //       .filter((row) => {
+    //         // Get the 5th td element (index 4) which contains the parcel count
+    //         const parcelCountCell = row.cells[4];
+    //         const parcelCount = parseInt(parcelCountCell.textContent.trim());
+    //         return parcelCount > 0;
+    //       })
+    //       .map((row) => row.id)
+    //       .filter(Boolean);
+    //   }
+    // );
 
-    console.log("notes");
-    console.log(noteIds);
-    console.log(noteIds.length);
+    // console.log("notes");
+    // console.log(noteIds);
+    // console.log(noteIds.length);
 
     async function getUnsyncedReturnNotes(page) {
       try {
@@ -173,6 +173,14 @@ async function getReturnNotes(page) {
           (rows, syncedIdsJSON) => {
             const syncedSet = new Set(JSON.parse(syncedIdsJSON));
             return rows
+              .filter((row) => {
+                // Get the 5th td element (index 4) which contains the parcel count
+                const parcelCountCell = row.cells[4];
+                const parcelCount = parseInt(
+                  parcelCountCell.textContent.trim()
+                );
+                return parcelCount > 0;
+              })
               .map((row) => row.id)
               .filter(Boolean)
               .filter((id) => !syncedSet.has(id));
